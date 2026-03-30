@@ -1,0 +1,11 @@
+Mar 30 14:20:01 server01 sshd[12340]: Accepted password for admin from 10.0.0.50 port 22 ssh2
+Mar 30 14:21:15 server01 sshd[12341]: Failed password for root from 192.168.1.100 port 22 ssh2
+Mar 30 14:21:16 server01 sshd[12342]: Failed password for root from 192.168.1.100 port 22 ssh2
+Mar 30 14:21:17 server01 sshd[12343]: Failed password for root from 192.168.1.100 port 22 ssh2
+Mar 30 14:21:18 server01 sshd[12344]: Failed password for root from 192.168.1.100 port 22 ssh2
+Mar 30 14:21:19 server01 sshd[12345]: Failed password for root from 192.168.1.100 port 22 ssh2
+Mar 30 14:21:20 server01 sshd[12346]: Failed password for invalid user test from 192.168.1.100 port 22 ssh2
+Mar 30 14:22:00 server01 sshd[12347]: Accepted password for deploy from 10.0.0.51 port 22 ssh2
+Mar 30 14:23:00 server01 sudo[12350]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/bin/bash
+Mar 30 14:25:00 server01 sshd[12360]: Failed password for admin from 172.16.0.200 port 22 ssh2
+Mar 30 14:30:00 server01 sshd[12370]: Accepted password for devops from 10.0.0.52 port 22 ssh2

@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  # --- Flask SOC API ---
+  soc-api:
+    build: .
+    container_name: mini-soc-api
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_DB_NAME=mini_soc
+      - BRUTE_FORCE_THRESHOLD=5
+      - BRUTE_FORCE_WINDOW_SECONDS=60
+      - PORT_SCAN_THRESHOLD=10
+      - PORT_SCAN_WINDOW_SECONDS=30
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - soc-net
+    restart: unless-stopped
+
+  # --- React Frontend Dashboard ---
+  soc-frontend:
+    build:
+      context: ./frontend
+    container_name: mini-soc-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - soc-api
+    networks:
+      - soc-net
+    restart: unless-stopped
+
+  # --- MongoDB (Event & Alert Store) ---
+  mongo:
+    image: mongo:7
+    container_name: mini-soc-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - soc-net
+    restart: unless-stopped
+
+networks:
+  soc-net:
+    driver: bridge
+
+volumes:
+  mongo-data:

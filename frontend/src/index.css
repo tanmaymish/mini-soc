@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-500: #3b82f6;
+  --font-sans: "Inter", "system-ui", "sans-serif";
+}
+
+body {
+  background-color: #0f172a; /* slate-900 */
+  color: #f8fafc; /* slate-50 */
+  font-family: var(--font-sans);
+}
+
+/* Custom scrollbar for dark mode */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
