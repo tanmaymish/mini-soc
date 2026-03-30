@@ -1,70 +1,84 @@
 <br/>
 <div align="center">
+  <img src="docs/hero.png" alt="Mini SOC Dashboard" width="800" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.5);" />
+  
   <h1 align="center">🛡️ Mini SOC: AI-Powered Threat Detection & Response</h1>
+  
   <p align="center">
-    A production-grade Security Information and Event Management (SIEM) and SOAR platform built with Python, Flask, React, and Machine Learning.
+    <strong>A production-grade, end-to-end Security Information and Event Management (SIEM) and SOAR platform.</strong>
   </p>
+
   <p align="center">
+    <a href="https://github.com/tanmaymish/mini-soc/releases"><img src="https://img.shields.io/github/v/release/tanmaymish/mini-soc?color=success&label=Release" alt="Release"></a>
+    <img src="https://img.shields.io/badge/Build-Passing-brightgreen.svg" alt="Build Status" />
     <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python Version" />
     <img src="https://img.shields.io/badge/React-18-61DAFB.svg" alt="React Component" />
-    <img src="https://img.shields.io/badge/Docker-Ready-2496ED.svg" alt="Docker Ready" />
-    <img src="https://img.shields.io/badge/Status-Active-success.svg" alt="Status" />
+    <img src="https://img.shields.io/badge/Machine_Learning-Isolation_Forest-orange.svg" alt="ML" />
+    <img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="License" />
   </p>
 </div>
 
 <br/>
 
 ## 🎯 Project Overview
-Mini SOC is an end-to-end cybersecurity pipeline designed to ingest raw logs, enrich them with Threat Intelligence, detect malicious behavior using both static rules and statistical anomaly detection, and automatically execute containment playbooks.
+Mini SOC is an elite cybersecurity pipeline designed to ingest raw logs, enrich them with Threat Intelligence, detect malicious behavior using both static rules and statistical anomaly detection, and automatically execute containment playbooks.
 
-It gives analysts a **"single pane of glass"** React dashboard to monitor the network in real-time.
-
-![Dashboard Preview](frontend/src/assets/hero.png) *(Note: Replace with actual screenshot of your React UI running!)*
+It provides security analysts with a **"single pane of glass"** React dashboard to monitor network telemetry in real-time, bridging the gap between raw data and actionable threat intelligence.
 
 ---
 
 ## 🏗️ System Architecture
 
-Mini SOC utilizes a highly modular pipeline imitating enterprise platforms like Splunk, Datadog Security, or Cortex XSOAR.
+Mini SOC utilizes a highly modular, decoupled pipeline architecture imitating enterprise platforms like Splunk, Datadog Security, or Cortex XSOAR.
 
 ```mermaid
 graph TD;
-    subgraph Data Ingestion
-      Logs[Raw Syslog & JSON] --> API(Ingestion API)
+    subgraph "1. Data Ingestion & Enrichment Layer"
+      Logs[Raw Syslog & JSON App Logs] --> API(Ingestion API)
       API --> Normalizer(Log Normalizer)
-      Normalizer --> TI{Threat Intel API}
+      Normalizer --> |IP Lookup| TI{Threat Intel DB}
     end
     
-    subgraph Storage
-      Normalizer --> MongoDB[(MongoDB Events)]
+    subgraph "2. Fast Data Storage"
+      Normalizer --> MongoDB[(MongoDB Events Volume)]
     end
 
-    subgraph Detection Engine
-      Normalizer --> Engine(Detection Rule Engine)
-      Engine --> Rule1(SSH Brute Force)
-      Engine --> Rule2(Port Scanning)
-      Engine --> Rule3(Privilege Escalation)
-      Engine --> Rule4(ML Anomaly Detection)
-      Engine --> Rule5(Threat Intel Matcher)
+    subgraph "3. Hybrid Detection Engine"
+      Normalizer --> Engine(Correlation & Detection Engine)
+      Engine -->|Threshold Based| Rule1(SSH Brute Force)
+      Engine -->|Velocity Based| Rule2(Horizontal Port Scanning)
+      Engine -->|Behavioral| Rule3(Privilege Escalation)
+      Engine -->|Statistical ML| Rule4(Isolation Forest Anomaly)
+      Engine -->|Reputation| Rule5(Threat Intel Matcher)
     end
 
-    subgraph Response Layer (SOAR)
-      Rule1 --> Dispatcher(Alert Dispatcher)
+    subgraph "4. Automated Response (SOAR)"
+      Rule1 --> Dispatcher(Event Dispatcher)
       Rule2 --> Dispatcher
       Rule3 --> Dispatcher
       Rule4 --> Dispatcher
       Rule5 --> Dispatcher
-      Dispatcher --> SOAR{SOAR Engine}
-      SOAR --> Playbook1(Auto-Block IP)
-      SOAR --> Playbook2(Lock User Account)
-      Playbook1 --> DB_M[(MongoDB Mitigations)]
+      Dispatcher --> SOAR{SOAR Execution Engine}
+      SOAR --> |Ingestion Level Drop| Playbook1(Auto-Block Attacker IP)
+      SOAR --> |Account Quarantine| Playbook2(Lock Compromised User)
+      Playbook1 --> DB_M[(Active Mitigations)]
     end
 
-    subgraph Frontend (React Analyst Dashboard)
-      MongoDB --> Dashboard([Alert Feed])
-      DB_M --> Dashboard([Active Defenses])
+    subgraph "5. Analyst Operations (Frontend)"
+      MongoDB --> Dashboard([Alert Feed & Telemetry])
+      DB_M --> Dashboard([Active Defense Monitoring])
     end
 ```
+
+---
+
+## 📦 Releases & Packaging
+
+Mini SOC is built with modern release engineering in mind.
+
+- **[v1.0.0-rc.1] (Current):** Stable release featuring the complete Ingestion, Detection, and SOAR automation flow.
+- **Docker Images:** The entire stack is packaged into optimized, multi-stage Docker containers.
+- **Microservices Deployment:** Separating the React UI, Python API Engine, and MongoDB into stateless containers allows horizontal scaling of the detection engine for high-throughput networks.
 
 ---
 
@@ -72,30 +86,24 @@ graph TD;
 
 ### 1. 🔍 Data Ingestion & Enrichment
 - Normalizes disparate log sources (`auth.log`, structured JSON, syslog) into a unified forensic schema.
-- Uses a **Mock Threat Intelligence Platform** (simulating VirusTotal/AbuseIPDB) to dynamically query external IPs and tag incoming logs with reputation scores and actor archetypes (e.g. `TOR_EXIT_NODE`).
+- Uses a **Threat Intelligence Module** to dynamically query external IPs and tag incoming logs with reputation scores and actor archetypes (e.g. `TOR_EXIT_NODE`, `BOTNET`).
 
 ### 2. 🧠 Hybrid Threat Detection
 Uses a multi-layered approach to threat hunting:
 - **Rule-Based Trips:** Detects traditional lateral movement (Port Scans), high-velocity attacks (Brute Force), and localized internal attacks (Privilege Escalation via `sudo`).
+- **Machine Learning (Isolation Forests):** An offline-trained baseline model detects statistical anomalies in network behavior, flagging attacks that try to fly "under the radar".
 - **Threat Intel Matching:** Instantly flags incoming logs from known malicious IPs.
-- **Machine Learning (Isolation Forests):** An offline-trained baseline model detects statistical anomalies in network behavior, flagging attacks that try to fly "under the radar" of static rules.
 
 ### 3. 🤖 Automated Remediation (SOAR)
 When high-severity alerts trigger, the built-in SOAR engine immediately executes response playbooks. 
-- Automatically blocklists attacker IPs at the ingestion layer firewall.
+- Automatically blocklists attacker IPs at the ingestion layer firewall, dropping their packets before analysis.
 - Quarantines and locks internal user accounts displaying signs of compromise.
-
-### 4. 📊 Analyst Dashboard
-A beautiful, modern single-page React app (Tailwind CSS, Recharts) providing:
-- Real-time polling of the Alert Feed.
-- Expandable forensic tables exposing raw log evidence.
-- An Active Mitigations feed showing exactly what automated perimeter defenses the AI has taken.
 
 ---
 
 ## 🚀 Quick Start (Docker Run)
 
-The entire application (Frontend, Flask API, MongoDB, and Pre-trained ML Models) is containerized for instant deployment.
+The entire application is fully containerized for instant deployment. 
 
 ```bash
 # 1. Clone the repository
@@ -106,14 +114,14 @@ cd mini-soc
 docker-compose up --build -d
 
 # 3. Access the React Dashboard
-Open http://localhost:5173 in your browser
+# Open http://localhost:5173 in your browser
 ```
 
 ---
 
 ## 🕹️ Simulating Cyber Attacks
 
-Once the SOC is running, you can fire built-in attack scenarios directly at the ingestion engine to watch the dashboard light up!
+Once the SOC is running, use the built-in attack simulator to generate realistic telemetry and watch the SIEM react in real-time.
 
 ```bash
 # Enter the Flask Container
@@ -124,6 +132,9 @@ python scripts/simulate_attack.py --mode brute_force
 
 # Simulate an APT Port Scan
 python scripts/simulate_attack.py --mode port_scan
+
+# Simulate an ML Data Exfiltration Anomaly
+python scripts/simulate_attack.py --mode anomaly
 
 # Simulate a Known Threat Actor hitting the perimeter
 python scripts/simulate_attack.py --mode threat_intel
@@ -136,14 +147,14 @@ python scripts/simulate_attack.py --mode all
 
 ## 🛠️ Technology Stack
 - **Backend:** Python 3.10+, Flask, Waitress
-- **Machine Learning:** Scikit-Learn (Isolation Forest), Pandas, Joblib
-- **Frontend:** React 18, Vite, Tailwind CSS, Recharts, date-fns
+- **Machine Learning:** Scikit-Learn (Isolation Forest), Pandas, NumPy
+- **Frontend:** React 18, Vite, Tailwind CSS, Recharts, Lucide Icons
 - **Data Storage:** MongoDB (PyMongo)
-- **Infrastructure:** Docker & Docker Compose
+- **Infrastructure:** Docker, Docker Compose
 
 ---
 
 <div align="center">
-  <b>Built for practical, hands-on Security Engineering.</b><br/>
+  <b>Built for practical, next-generation Security Engineering.</b><br/>
   Detect the breach. Contain the threat. Automate the response.
 </div>
