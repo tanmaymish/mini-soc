@@ -43,7 +43,10 @@ export default function AlertTable({ alerts }) {
                     {alerts.map((alert) => (
                         <React.Fragment key={alert._id || alert.timestamp}>
                             <tr
-                                className="bg-slate-800 border-b border-slate-700 hover:bg-slate-700/50 transition-colors cursor-pointer"
+                                className={clsx(
+                                    "bg-slate-800 border-b border-slate-700 hover:bg-slate-700/50 transition-colors cursor-pointer",
+                                    alert.isNew && "row-new"
+                                )}
                                 onClick={() => toggleExpand(alert._id || alert.timestamp)}
                             >
                                 <td className="px-6 py-4 whitespace-nowrap opacity-80">

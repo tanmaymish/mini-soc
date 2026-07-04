@@ -11,6 +11,19 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Flash + slide when a new alert / mitigation lands in a feed */
+@keyframes rowFlash {
+  0%   { background-color: rgba(59, 130, 246, 0.25); }
+  100% { background-color: transparent; }
+}
+@keyframes rowIn {
+  0%   { opacity: 0; transform: translateY(-6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.row-new {
+  animation: rowFlash 1.6s ease-out, rowIn 0.35s ease-out;
+}
+
 /* Custom scrollbar for dark mode */
 ::-webkit-scrollbar {
   width: 8px;

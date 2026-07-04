@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
+import clsx from 'clsx';
 import { ShieldBan, UserX } from 'lucide-react';
 
 export default function MitigationTable({ mitigations }) {
@@ -41,7 +42,10 @@ export default function MitigationTable({ mitigations }) {
                     {mitigations.map((m) => (
                         <React.Fragment key={m._id || m.timestamp}>
                             <tr
-                                className="bg-slate-800 border-b border-slate-700 hover:bg-slate-700/50 transition-colors cursor-pointer"
+                                className={clsx(
+                                    "bg-slate-800 border-b border-slate-700 hover:bg-slate-700/50 transition-colors cursor-pointer",
+                                    m.isNew && "row-new"
+                                )}
                                 onClick={() => toggleExpand(m._id || m.timestamp)}
                             >
                                 <td className="px-6 py-4 whitespace-nowrap opacity-80">

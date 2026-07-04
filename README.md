@@ -220,7 +220,7 @@ stateless API.
 
 | Layer | Host | How |
 |-------|------|-----|
-| **Dashboard** (React) | **GitHub Pages** | Auto-deploys on every push to `master` via `.github/workflows/deploy-pages.yml`. Ships in **Demo Mode** with simulated telemetry — no backend required. Live at **[tanmaymish.github.io/mini-soc](https://tanmaymish.github.io/mini-soc/)**. |
+| **Dashboard** (React) | **GitHub Pages** | Auto-deploys on every push to `master` via `.github/workflows/deploy-pages.yml`. Ships an **interactive demo** — click to launch attacks and watch live charts, a streaming log console, and auto-containment react in real time. No backend required. Live at **[tanmaymish.github.io/mini-soc](https://tanmaymish.github.io/mini-soc/)**. |
 | **API + Engine** (Flask) | **Render / Railway / Fly** | One-click via the included `render.yaml`. Runs under `gunicorn`. |
 | **Database** | **Neon / Supabase** (Postgres) | Set `DATABASE_URL` and the app switches from Mongo to Postgres automatically. |
 
