@@ -22,6 +22,10 @@ from app.detection.rules.priv_escalation import PrivilegeEscalationRule
 from app.detection.rules.anomaly_rule import MLAnomalyRule
 from app.detection.rules.threat_intel_match import ThreatIntelRule
 from app.detection.rules.web_attack import WebAttackRule
+from app.detection.rules.api_admin_abuse import AdminAbuseRule
+from app.detection.rules.graphql_abuse import GraphQLAbuseRule
+from app.detection.rules.api_abuse import ApiAbuseRule
+from app.detection.rules.token_anomaly import TokenAnomalyRule
 
 logger = logging.getLogger("mini_soc.detection.engine")
 
@@ -47,6 +51,14 @@ class DetectionEngine:
             PrivilegeEscalationRule(),
             MLAnomalyRule(),
             WebAttackRule(),
+            # --- API-security domain ---
+            AdminAbuseRule(),
+            GraphQLAbuseRule(),
+            ApiAbuseRule(
+                rate_threshold=config.get("API_RATE_THRESHOLD", 20),
+                window_seconds=config.get("API_RATE_WINDOW_SECONDS", 30),
+            ),
+            TokenAnomalyRule(),
         ]
 
         # Stats tracking

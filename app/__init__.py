@@ -49,10 +49,12 @@ def create_app(config_class=None):
     from app.ingestion.routes import ingestion_bp
     from app.api.alert_routes import alert_bp
     from app.api.mitigation_routes import mitigation_bp
+    from app.api.incident_routes import incident_bp
 
     app.register_blueprint(ingestion_bp, url_prefix="/api/ingestion")
     app.register_blueprint(alert_bp, url_prefix="/api/alerts")
     app.register_blueprint(mitigation_bp, url_prefix="/api/mitigations")
+    app.register_blueprint(incident_bp, url_prefix="/api/incidents")
 
     # Health check endpoint
     @app.route("/health")

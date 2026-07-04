@@ -7,6 +7,9 @@ Listens for alerts and matches them to the appropriate playbook.
 import logging
 from app.response.playbooks.block_ip import BlockIPPlaybook
 from app.response.playbooks.disable_user import DisableUserPlaybook
+from app.response.playbooks.rate_limit import RateLimitPlaybook
+from app.response.playbooks.require_reauth import RequireReauthPlaybook
+from app.response.playbooks.disable_session import DisableSessionPlaybook
 
 logger = logging.getLogger("mini_soc.soar.engine")
 
@@ -16,7 +19,10 @@ class SoarEngine:
         # Register available playbooks
         self.playbooks = [
             BlockIPPlaybook(),
-            DisableUserPlaybook()
+            DisableUserPlaybook(),
+            RateLimitPlaybook(),
+            RequireReauthPlaybook(),
+            DisableSessionPlaybook(),
         ]
         
         # Build a mapping of rule_name -> list of playbooks to execute

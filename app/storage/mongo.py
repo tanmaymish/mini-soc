@@ -196,6 +196,30 @@ def get_mitigations(limit: int = 50) -> list[dict]:
         
     return mitigations
 
+def upsert_incident(incident: dict) -> str | None:
+    """Insert or update a correlated incident (keyed by incident_id)."""
+    db = get_db()
+    if db is None:
+        return None
+    try:
+        db.incidents.replace_one(
+            {"incident_id": incident["incident_id"]}, dict(incident), upsert=True
+        )
+        return incident["incident_id"]
+    except Exception as e:
+        logger.error(f"Failed to upsert incident: {e}")
+        return None
+
+
+def get_incidents(limit: int = 50) -> list[dict]:
+    """Retrieve recent incidents, newest first."""
+    db = get_db()
+    if db is None:
+        return []
+    cursor = db.incidents.find({}, {"_id": 0}).sort("updated_at", DESCENDING).limit(limit)
+    return list(cursor)
+
+
 def is_ip_blocked(ip_address: str) -> bool:
     """Check if an IP is actively blocked by the SOAR engine."""
     db = get_db()

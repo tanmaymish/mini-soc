@@ -41,6 +41,12 @@ CREATE TABLE IF NOT EXISTS mitigations (
     doc JSONB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_mitig_target ON mitigations ((doc->>'target'));
+
+CREATE TABLE IF NOT EXISTS incidents (
+    incident_id TEXT PRIMARY KEY,
+    doc JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_inc_updated ON incidents ((doc->>'updated_at'));
 """
 
 
@@ -223,6 +229,33 @@ def get_mitigations(limit: int = 50) -> list[dict]:
             doc["_id"] = str(row_id)
             results.append(doc)
         return results
+
+
+def upsert_incident(incident: dict) -> str | None:
+    """Insert or update a correlated incident (keyed by incident_id)."""
+    conn = _get_conn()
+    if conn is None:
+        return None
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO incidents (incident_id, doc) VALUES (%s, %s) "
+            "ON CONFLICT (incident_id) DO UPDATE SET doc = EXCLUDED.doc",
+            (incident["incident_id"], json.dumps(incident, default=str)),
+        )
+        return incident["incident_id"]
+
+
+def get_incidents(limit: int = 50) -> list[dict]:
+    """Retrieve recent incidents, newest first."""
+    conn = _get_conn()
+    if conn is None:
+        return []
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT doc FROM incidents ORDER BY doc->>'updated_at' DESC LIMIT %s",
+            (limit,),
+        )
+        return [row[0] for row in cur.fetchall()]
 
 
 def is_ip_blocked(ip_address: str) -> bool:

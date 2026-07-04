@@ -16,6 +16,7 @@ Enrichment comes in later phases.
 import logging
 from app.models.log_event import create_log_event
 from app.enrichment.threat_intel import lookup_ip
+from app.detection.api_map import map_endpoint
 
 logger = logging.getLogger("mini_soc.ingestion.normalizer")
 
@@ -103,6 +104,57 @@ def normalize_access_log(parsed: dict, raw_log: str) -> dict:
         "status": parsed.get("status"),
         "user_agent": parsed.get("user_agent"),
         "referer": parsed.get("referer"),
+    })
+    return event
+
+
+def normalize_api_event(data: dict) -> dict:
+    """
+    Normalize a structured API request event.
+
+    Expected input (JSON):
+      { "method": "POST", "path": "/api/admin/users", "query": "",
+        "status": 403, "source_ip": "1.2.3.4", "user": "alice",
+        "token": "tok_...", "tenant": "acme", "role": "user",
+        "graphql": "<query>"  # optional, for /api/graphql }
+
+    The endpoint is mapped to a security domain (service + base risk) and the
+    request fields are kept at the top level so the API-security rules can
+    inspect them directly.
+    """
+    path = data.get("path", "") or ""
+    mapping = map_endpoint(path)
+
+    source_ip = data.get("source_ip", "") or ""
+    intel_data = lookup_ip(source_ip) if source_ip else {
+        "reputation_score": 0, "tags": [], "provider": "mock",
+    }
+
+    event = create_log_event(
+        raw_log=str(data),
+        timestamp=data.get("timestamp"),
+        source_ip=source_ip,
+        hostname=data.get("hostname"),
+        service=mapping["service"],
+        action="API_REQUEST",
+        user=data.get("user"),
+        destination_port=data.get("destination_port"),
+        severity="info",
+        metadata={"intel": intel_data, "endpoint_risk": mapping["risk"]},
+    )
+
+    # Top-level request details for the API-security rules + correlation.
+    event.update({
+        "http_method": (data.get("method") or "GET").upper(),
+        "path": path,
+        "query": data.get("query", ""),
+        "status": data.get("status"),
+        "token": data.get("token"),
+        "tenant": data.get("tenant"),
+        "role": data.get("role"),
+        "graphql": data.get("graphql"),
+        "api_service": mapping["service"],
+        "endpoint_risk": mapping["risk"],
     })
     return event
 

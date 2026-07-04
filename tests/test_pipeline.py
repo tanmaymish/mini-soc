@@ -68,8 +68,11 @@ class TestFullPipeline:
             alerts = self._process_log(line)
             all_alerts.extend(alerts)
 
-        assert len(all_alerts) == 1
-        assert all_alerts[0]["rule_name"] == "port_scan"
+        # The port_scan rule must fire exactly once. (When the ML model is
+        # loaded it may also flag the scan as anomalous — a legitimate
+        # co-detection — so assert on the specific rule, not the total.)
+        port_scan_alerts = [a for a in all_alerts if a["rule_name"] == "port_scan"]
+        assert len(port_scan_alerts) == 1
 
     def test_priv_escalation_pipeline(self):
         """Full pipeline: failed login + sudo → priv esc alert."""
@@ -125,4 +128,4 @@ class TestFullPipeline:
 
         stats = self.engine.get_stats()
         assert stats["events_processed"] == 3
-        assert stats["rules_loaded"] == 6
+        assert stats["rules_loaded"] == 10

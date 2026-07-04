@@ -1,10 +1,14 @@
 import React from 'react';
 import {
     KeyRound, Radar, Database, Code, Globe, UserCog, Cpu, Zap, Trash2,
+    ShieldAlert, Boxes, Fingerprint, Crosshair,
 } from 'lucide-react';
 import { ATTACKS, ATTACK_KEYS } from '../simEngine';
 
-const ICONS = { KeyRound, Radar, Database, Code, Globe, UserCog, Cpu };
+const ICONS = {
+    KeyRound, Radar, Database, Code, Globe, UserCog, Cpu,
+    ShieldAlert, Boxes, Fingerprint, Crosshair,
+};
 
 const COLOR = {
     red: 'hover:border-red-500/60 hover:bg-red-500/10 text-red-300',
@@ -44,7 +48,7 @@ export default function AttackSimulator({ onAttack, onUnleash, onReset, running 
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
                 {ATTACK_KEYS.map((key) => {
                     const a = ATTACKS[key];
                     const Icon = ICONS[a.icon] || Zap;

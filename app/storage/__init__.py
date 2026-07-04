@@ -69,5 +69,13 @@ def get_mitigations(limit=50):
     return _backend.get_mitigations(limit=limit)
 
 
+def upsert_incident(incident: dict):
+    return _backend.upsert_incident(incident)
+
+
+def get_incidents(limit=50):
+    return _backend.get_incidents(limit=limit)
+
+
 def is_ip_blocked(ip_address: str) -> bool:
     return _backend.is_ip_blocked(ip_address)

@@ -16,10 +16,14 @@ import logging
 from flask import Blueprint, request, jsonify
 
 from app.ingestion.syslog_parser import parse_syslog_line
-from app.ingestion.normalizer import normalize_parsed_log, normalize_json_event
+from app.ingestion.normalizer import normalize_parsed_log, normalize_json_event, normalize_api_event
 from app.detection.engine import DetectionEngine
+from app.correlation.engine import CorrelationEngine
 from app.alerting.dispatcher import AlertDispatcher
-from app.storage import store_event, store_alert, get_alerts, get_alert_stats, count_events, is_ip_blocked
+from app.storage import (
+    store_event, store_alert, get_alerts, get_alert_stats, count_events,
+    is_ip_blocked, upsert_incident,
+)
 from app.response.engine import SoarEngine
 
 logger = logging.getLogger("mini_soc.ingestion.routes")
@@ -30,6 +34,23 @@ ingestion_bp = Blueprint("ingestion", __name__)
 _engine = None
 _dispatcher = None
 _soar = None
+_correlator = None
+
+
+def _get_correlator():
+    """Lazy-init the correlation engine."""
+    global _correlator
+    if _correlator is None:
+        _correlator = CorrelationEngine()
+    return _correlator
+
+
+def _correlate_and_store(correlator, alert):
+    """Feed an alert to correlation; persist any incident it produces."""
+    incident = correlator.correlate(alert)
+    if incident:
+        upsert_incident(incident)
+    return incident
 
 
 def _get_engine():
@@ -81,6 +102,9 @@ def ingest_log():
             if "raw" in data and isinstance(data["raw"], str):
                 parsed = parse_syslog_line(data["raw"])
                 event = normalize_parsed_log(parsed, data["raw"])
+            elif data.get("type") == "api" or ("method" in data and "path" in data):
+                # Structured API request event → API-security domain
+                event = normalize_api_event(data)
             else:
                 event = normalize_json_event(data)
         else:
@@ -107,29 +131,43 @@ def ingest_log():
         alerts = engine.evaluate(event)
         dispatcher = _get_dispatcher()
         soar = _get_soar()
+        correlator = _get_correlator()
 
         # Store any triggered alerts and dispatch them
         stored_alerts = []
+        incidents = []
         for alert in alerts:
             alert_id = store_alert(alert)
             alert["_id"] = alert_id  # optionally add ID for external context
-            
+
             # Post-detection Orchestration
             dispatcher.dispatch(alert)
             soar.handle_alert(alert)
-            
+
+            # Correlate multi-step attacks into incidents
+            incident = _correlate_and_store(correlator, alert)
+            if incident:
+                incidents.append({
+                    "incident_id": incident["incident_id"],
+                    "severity": incident["severity"],
+                    "kill_chain": incident["kill_chain"],
+                })
+
             stored_alerts.append({
                 "id": alert_id,
                 "rule": alert["rule_name"],
                 "severity": alert["severity"],
+                "service": (alert.get("metadata") or {}).get("service"),
             })
 
         return jsonify({
             "status": "ingested",
             "event_id": event_id,
             "action": event.get("action"),
+            "service": event.get("api_service"),
             "alerts_triggered": len(stored_alerts),
             "alerts": stored_alerts,
+            "incidents": incidents,
         }), 201
 
     except Exception as e:
@@ -145,6 +183,7 @@ def ingest_bulk():
     engine = _get_engine()
     dispatcher = _get_dispatcher()
     soar = _get_soar()
+    correlator = _get_correlator()
 
     try:
         data = request.get_json(force=True)
@@ -152,21 +191,26 @@ def ingest_bulk():
         if not data:
             return jsonify({"error": "No data provided"}), 400
 
-        results = {"ingested": 0, "failed": 0, "dropped": 0, "alerts_triggered": 0}
+        results = {"ingested": 0, "failed": 0, "dropped": 0,
+                   "alerts_triggered": 0, "incidents": 0}
         all_alerts = []
+        incident_ids = set()
 
         def process_event(event):
             source_ip = event.get("source_ip")
             if source_ip and is_ip_blocked(source_ip):
                 results["dropped"] += 1
                 return
-                
+
             store_event(event)
             alerts = engine.evaluate(event)
             for alert in alerts:
-                store_alert(alert)
+                alert["_id"] = store_alert(alert)
                 dispatcher.dispatch(alert)
                 soar.handle_alert(alert)
+                incident = _correlate_and_store(correlator, alert)
+                if incident:
+                    incident_ids.add(incident["incident_id"])
                 all_alerts.append({
                     "rule": alert["rule_name"],
                     "severity": alert["severity"],
@@ -183,15 +227,19 @@ def ingest_bulk():
             else:
                 results["failed"] += 1
 
-        # Handle structured events
+        # Handle structured events (API events routed to the API normalizer)
         events = data.get("events", [])
         for evt_data in events:
-            event = normalize_json_event(evt_data)
+            if evt_data.get("type") == "api" or ("method" in evt_data and "path" in evt_data):
+                event = normalize_api_event(evt_data)
+            else:
+                event = normalize_json_event(evt_data)
             if event:
                 process_event(event)
 
         results["alerts_triggered"] = len(all_alerts)
         results["alerts"] = all_alerts
+        results["incidents"] = len(incident_ids)
 
         return jsonify(results), 201
 

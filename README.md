@@ -108,11 +108,25 @@ Uses a multi-layered approach to threat hunting, and every rule is mapped to a
 | `ml_behavioral_anomaly` | Statistical outliers (Isolation Forest) | [T1078](https://attack.mitre.org/techniques/T1078/) |
 | `threat_intel_match` | Traffic from known-bad IPs | [T1071](https://attack.mitre.org/techniques/T1071/) |
 | `web_attack` | SQLi, XSS, path traversal, scanners in web logs | [T1190](https://attack.mitre.org/techniques/T1190/) |
+| `admin_endpoint_abuse` | Unauthorized admin access / broken access control | [T1548](https://attack.mitre.org/techniques/T1548/) |
+| `graphql_abuse` | Introspection, deep-query DoS, mutations | [T1595](https://attack.mitre.org/techniques/T1595/) |
+| `api_abuse` | API rate abuse & endpoint enumeration | [T1595](https://attack.mitre.org/techniques/T1595/) |
+| `token_anomaly` | Token reuse from new IP / multi-tenant access | [T1539](https://attack.mitre.org/techniques/T1539/) |
 
 - **Rule-Based Trips:** Traditional lateral movement (Port Scans), high-velocity attacks (Brute Force), and localized internal attacks (Privilege Escalation via `sudo`).
 - **Web Attack Detection:** WAF-style signatures catch SQL injection, XSS, path traversal, command injection, and automated scanners (sqlmap, nikto, nuclei) in Nginx/Apache access logs.
+- **API Security:** Every request is mapped to a security domain (Auth / Admin / Identity / GraphQL Gateway / Payments) with a base risk, then checked for admin control-plane abuse (broken access control), GraphQL introspection & deep-query abuse, API rate-abuse & enumeration, and stolen-token / multi-tenant access (IDOR).
 - **Machine Learning (Isolation Forests):** An offline-trained baseline model detects statistical anomalies in network behavior, flagging attacks that try to fly "under the radar".
 - **Threat Intel Matching:** Instantly flags incoming logs from known malicious IPs.
+
+### 2.5 🔗 Correlation Engine → Incidents
+Individual alerts are data points; **incidents are stories.** The correlation
+engine stitches an actor's separate weak signals into one multi-stage incident
+with a combined severity and a MITRE-ordered **kill-chain narrative** (e.g.
+`Reconnaissance → Credential Access → Privilege Escalation`) — the equivalent
+of QRadar offenses or Splunk ES notable events. Served at `/api/incidents` and
+surfaced live on the dashboard. New SOAR playbooks respond to the API domain:
+**rate-limit**, **require re-authentication**, and **disable session**.
 
 ### 3. 🤖 Automated Remediation (SOAR)
 When high-severity alerts trigger, the built-in SOAR engine immediately executes response playbooks. 

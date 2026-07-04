@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { Activity, ShieldCheck, Radar, Cpu, FlaskConical } from 'lucide-react';
+import { Activity, ShieldCheck, Radar, Cpu, FlaskConical, GitBranch } from 'lucide-react';
 import StatCard from './StatCard';
 import AlertTable from './AlertTable';
 import MitigationTable from './MitigationTable';
 import AttackSimulator from './AttackSimulator';
 import ThreatCharts from './ThreatCharts';
 import LiveConsole from './LiveConsole';
+import IncidentsPanel from './IncidentsPanel';
 import { getDemoAlerts, getDemoMitigations } from '../demoData';
-import { ATTACK_KEYS, buildAttack, benignLog } from '../simEngine';
+import { ATTACK_KEYS, buildAttack, benignLog, correlateAlerts } from '../simEngine';
 
 // Demo mode: interactive, self-contained build (e.g. GitHub Pages).
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
@@ -33,8 +34,15 @@ export default function Dashboard() {
     const [timeline, setTimeline] = useState(makeTimeline);
     const [running, setRunning] = useState(false);
     const [eventsAnalyzed, setEventsAnalyzed] = useState(10245);
+    const [liveIncidents, setLiveIncidents] = useState([]);
 
     const bucketHits = useRef(0);
+
+    // Demo: incidents are correlated client-side from the alerts on the board.
+    // Live: they come from the backend's correlation engine.
+    const demoIncidents = useMemo(
+        () => (DEMO_MODE ? correlateAlerts(alerts) : []), [alerts]);
+    const incidents = DEMO_MODE ? demoIncidents : liveIncidents;
 
     const pushLogs = useCallback((entries) => {
         const stamped = entries.map((e) => ({ ...e, id: `l${_lid++}`, time: clock() }));
@@ -99,16 +107,18 @@ export default function Dashboard() {
         if (DEMO_MODE) return;
         const fetchData = async () => {
             try {
-                const [alertRes, mitigRes, statsRes] = await Promise.all([
+                const [alertRes, mitigRes, statsRes, incRes] = await Promise.all([
                     axios.get(`${API_BASE}/alerts`),
                     axios.get(`${API_BASE}/mitigations`),
                     axios.get(`${API_BASE}/ingestion/stats`),
+                    axios.get(`${API_BASE}/incidents`),
                 ]);
                 const sorted = [...alertRes.data.alerts].sort(
                     (a, b) => new Date(b.timestamp) - new Date(a.timestamp));
                 setAlerts(sorted);
                 setMitigations(mitigRes.data);
                 setEventsAnalyzed(statsRes.data.total_events ?? 0);
+                setLiveIncidents(incRes.data || []);
                 setError(null);
             } catch (err) {
                 console.error('Error fetching SOC data:', err);
@@ -190,6 +200,22 @@ export default function Dashboard() {
 
             {/* Charts */}
             <ThreatCharts alerts={alerts} timeline={timeline} />
+
+            {/* Correlated Incidents — multi-stage attacks stitched into a kill-chain */}
+            <div className="mb-8">
+                <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                        <GitBranch className="h-5 w-5 text-brand-500" />
+                        Correlated Incidents
+                    </h2>
+                    {incidents.length > 0 && (
+                        <span className="text-xs bg-red-500/20 text-red-300 px-2 py-1 rounded font-bold border border-red-500/30">
+                            {incidents.length} ACTIVE INCIDENT(S)
+                        </span>
+                    )}
+                </div>
+                <IncidentsPanel incidents={incidents} />
+            </div>
 
             {/* Live log console (demo only) */}
             {DEMO_MODE && <LiveConsole lines={logs} />}
