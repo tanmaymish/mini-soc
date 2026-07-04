@@ -36,13 +36,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Auto-enables GitHub Pages (source: GitHub Actions) on first run using
-      # the workflow token's pages:write permission — no manual setup needed.
+      # Reads the existing Pages config (Pages must be enabled once in
+      # Settings → Pages → Source: GitHub Actions).
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Build
         run: npm run build
