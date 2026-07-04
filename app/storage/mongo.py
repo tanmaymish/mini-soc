@@ -72,7 +72,10 @@ def store_event(event: dict) -> str | None:
         logger.debug("DB unavailable, skipping event storage.")
         return None
 
-    result = db.log_events.insert_one(event)
+    # Insert a copy — insert_one mutates its argument with an ObjectId
+    # `_id`, which would otherwise leak into alert evidence and break
+    # JSON serialization downstream.
+    result = db.log_events.insert_one(dict(event))
     return str(result.inserted_id)
 
 
@@ -88,7 +91,7 @@ def store_alert(alert: dict) -> str | None:
         logger.debug("DB unavailable, skipping alert storage.")
         return None
 
-    result = db.alerts.insert_one(alert)
+    result = db.alerts.insert_one(dict(alert))
     logger.info(
         f"ALERT STORED: [{alert['severity'].upper()}] "
         f"{alert['rule_name']} from {alert['source_ip']}"
@@ -141,6 +144,14 @@ def get_events(source_ip: str = None, limit: int = 100) -> list:
         .limit(limit)
     )
     return list(cursor)
+
+
+def count_events() -> int:
+    """Total number of ingested events (dashboard telemetry tile)."""
+    db = get_db()
+    if db is None:
+        return 0
+    return db.log_events.count_documents({})
 
 
 def get_alert_stats() -> dict:

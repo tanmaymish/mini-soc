@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import clsx from 'clsx';
 import { ShieldBan, UserX } from 'lucide-react';
 
 export default function MitigationTable({ mitigations }) {

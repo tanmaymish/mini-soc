@@ -21,7 +21,7 @@ import joblib
 # Add the project root to sys.path so we can import 'app'
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app.storage.mongo import get_db, init_db
+from app.storage import get_db, get_events, init_db
 from app.detection.ml.feature_extractor import FeatureExtractor
 from flask import Flask
 
@@ -33,25 +33,28 @@ MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
 
 
 def fetch_training_data() -> list[dict]:
-    """Fetch recent benign logs from MongoDB to use as a baseline."""
+    """Fetch recent benign logs from the event store to use as a baseline."""
     # Dummy Flask app just to init DB config
     app = Flask(__name__)
+    app.config["DATABASE_URL"] = os.getenv("DATABASE_URL")
     app.config["MONGO_URI"] = os.getenv("MONGO_URI", "mongodb://localhost:27017")
     app.config["MONGO_DB_NAME"] = os.getenv("MONGO_DB_NAME", "mini_soc")
-    
+
     init_db(app)
     db = get_db()
-    
+
     if db is None:
-        logger.error("Could not connect to MongoDB. Is it running?")
-        sys.exit(1)
+        logger.warning(
+            "Could not connect to the database — falling back to a synthetic "
+            "benign baseline so the model can still be trained (cold start)."
+        )
+        return []
 
     # In production, we'd filter out known attacks/alerts to ensure
-    # the baseline is truly benign behavior. 
+    # the baseline is truly benign behavior.
     # For this mini-SOC, we grab the last 10,000 events.
-    logger.info("Fetching training data from MongoDB...")
-    cursor = db.log_events.find({}, {"_id": 0}).sort("timestamp", -1).limit(10000)
-    events = list(cursor)
+    logger.info("Fetching training data from the event store...")
+    events = get_events(limit=10000)
     
     if len(events) < 10:
         logger.warning(

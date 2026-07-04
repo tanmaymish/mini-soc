@@ -9,12 +9,20 @@
   </p>
 
   <p align="center">
-    <a href="https://github.com/tanmaymish/mini-soc/releases"><img src="https://img.shields.io/github/v/release/tanmaymish/mini-soc?color=success&label=Release" alt="Release"></a>
-    <img src="https://img.shields.io/badge/Build-Passing-brightgreen.svg" alt="Build Status" />
+    <a href="https://github.com/tanmaymish/mini-soc/actions/workflows/ci.yml"><img src="https://github.com/tanmaymish/mini-soc/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="https://tanmaymish.github.io/mini-soc/"><img src="https://img.shields.io/badge/Live_Demo-Dashboard-success.svg" alt="Live Demo" /></a>
     <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python Version" />
-    <img src="https://img.shields.io/badge/React-18-61DAFB.svg" alt="React Component" />
+    <img src="https://img.shields.io/badge/React-19-61DAFB.svg" alt="React" />
     <img src="https://img.shields.io/badge/Machine_Learning-Isolation_Forest-orange.svg" alt="ML" />
     <img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="License" />
+  </p>
+
+  <p align="center">
+    <a href="https://tanmaymish.github.io/mini-soc/"><b>🌐 Live Dashboard Demo</b></a>
+    &nbsp;·&nbsp;
+    <a href="#-30-second-quick-start-the-soc-cli"><b>⚡ 30-Second CLI</b></a>
+    &nbsp;·&nbsp;
+    <a href="#-deployment"><b>🚀 Deploy Your Own</b></a>
   </p>
 </div>
 
@@ -101,20 +109,59 @@ When high-severity alerts trigger, the built-in SOAR engine immediately executes
 
 ---
 
-## 🚀 Quick Start (Docker Run)
+## ⚡ 30-Second Quick Start: The SOC CLI
 
-The entire application is fully containerized for instant deployment. 
+No Docker. No database. No server. The `soc` CLI runs the **exact same
+detection engine** the platform uses, straight against your own log files —
+so you can hunt threats in `/var/log/auth.log` in seconds.
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/tanmaymish/mini-soc.git
 cd mini-soc
+pip install -r requirements.txt
+python scripts/train_model.py          # build the baseline ML model (offline)
 
-# 2. Spin up the entire pipeline
+# 🔍 Scan any log file → colorized threat report + recommended firewall blocks
+python -m cli scan sample_logs/auth.log
+
+# 📡 Live-tail a real log and watch detections fire in real time
+sudo python -m cli watch /var/log/auth.log
+
+# 🌐 Check any IP against the threat-intel database
+python -m cli ip 185.220.101.1
+
+# 🎬 Fire every built-in attack scenario through the engine (great for demos)
+python -m cli demo
+```
+
+A `soc scan` reports every triggered rule, ranks the noisiest source IPs, and
+prints copy-paste `iptables` commands to contain the attackers it found. Add
+`--json` to any command to pipe results into your own tooling.
+
+---
+
+## 🚀 Full Stack (Docker Compose)
+
+The entire application is containerized — API engine, React dashboard, and
+database — for instant deployment.
+
+```bash
+# Spin up the whole pipeline (API + dashboard + MongoDB)
 docker-compose up --build -d
 
-# 3. Access the React Dashboard
-# Open http://localhost:5173 in your browser
+# Open the dashboard
+open http://localhost:5173
+
+# Generate realistic attack telemetry and watch the SOC react
+docker exec -it mini-soc-api python scripts/simulate_attack.py --mode all
+```
+
+Prefer serverless Postgres over Mongo? Just export a connection string first —
+no code changes:
+
+```bash
+export DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"  # e.g. Neon
+docker-compose up --build -d
 ```
 
 ---
@@ -145,12 +192,34 @@ python scripts/simulate_attack.py --mode all
 
 ---
 
+## 🚀 Deployment
+
+Mini SOC hosts entirely on free tiers, split into a static dashboard and a
+stateless API.
+
+| Layer | Host | How |
+|-------|------|-----|
+| **Dashboard** (React) | **GitHub Pages** | Auto-deploys on every push to `master` via `.github/workflows/deploy-pages.yml`. Ships in **Demo Mode** with simulated telemetry — no backend required. Live at **[tanmaymish.github.io/mini-soc](https://tanmaymish.github.io/mini-soc/)**. |
+| **API + Engine** (Flask) | **Render / Railway / Fly** | One-click via the included `render.yaml`. Runs under `gunicorn`. |
+| **Database** | **Neon / Supabase** (Postgres) | Set `DATABASE_URL` and the app switches from Mongo to Postgres automatically. |
+
+**Enable GitHub Pages** (one time): repo **Settings → Pages → Source: GitHub Actions**. The next push deploys the dashboard.
+
+**Point the live dashboard at your API:** set the repo/Actions variable
+`VITE_API_BASE_URL` to your deployed API's `/api` URL and drop `VITE_DEMO_MODE`.
+
+> 🔐 **Never commit secrets.** Keep `DATABASE_URL` and webhook URLs in
+> environment variables / host secrets, not in git.
+
+---
+
 ## 🛠️ Technology Stack
-- **Backend:** Python 3.10+, Flask, Waitress
+- **Backend:** Python 3.12, Flask, Gunicorn
 - **Machine Learning:** Scikit-Learn (Isolation Forest), Pandas, NumPy
-- **Frontend:** React 18, Vite, Tailwind CSS, Recharts, Lucide Icons
-- **Data Storage:** MongoDB (PyMongo)
-- **Infrastructure:** Docker, Docker Compose
+- **Frontend:** React 19, Vite, Tailwind CSS, Recharts, Lucide Icons
+- **Data Storage:** Pluggable — MongoDB *or* PostgreSQL / Neon (JSONB), same API
+- **CLI:** Pure-stdlib `soc` command — offline log hunting, zero setup
+- **Infrastructure:** Docker, Docker Compose, GitHub Actions, GitHub Pages
 
 ---
 

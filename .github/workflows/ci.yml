@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  backend:
+    name: Backend (pytest + CLI)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: soc
+          POSTGRES_PASSWORD: soc
+          POSTGRES_DB: mini_soc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U soc"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run unit + integration tests
+        run: pytest -q
+
+      - name: Train baseline ML model (synthetic cold-start)
+        run: python scripts/train_model.py
+
+      - name: Smoke-test the SOC CLI
+        run: |
+          python -m cli scan sample_logs/auth.log --quiet
+          python -m cli demo --quiet
+          python -m cli ip 185.220.101.1 --json
+
+      - name: Smoke-test the API against PostgreSQL
+        env:
+          DATABASE_URL: postgresql://soc:soc@localhost:5432/mini_soc
+        run: python scripts/ci_smoke.py
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build (demo mode)
+        run: npm run build
+        env:
+          VITE_DEMO_MODE: "true"

@@ -38,7 +38,7 @@ def create_app(config_class=None):
     logger.info("Mini SOC starting up...")
 
     # Initialize MongoDB connection
-    from app.storage.mongo import init_db
+    from app.storage import init_db
     init_db(app)
 
     # Enable CORS for the React frontend (running on different port)

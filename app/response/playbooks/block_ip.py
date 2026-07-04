@@ -12,7 +12,7 @@ drop subsequent logs from this IP before processing.
 import logging
 from datetime import datetime, timezone
 from app.response.playbooks.base import BasePlaybook
-from app.storage.mongo import store_mitigation
+from app.storage import store_mitigation
 
 logger = logging.getLogger("mini_soc.soar.block_ip")
 
@@ -29,9 +29,10 @@ class BlockIPPlaybook(BasePlaybook):
         # We auto-block anyone caught brute forcing, port scanning,
         # or triggering the ML anomaly rule (if severity is high).
         return [
-            "ssh_brute_force",
-            "horizontal_port_scan",
-            "ml_behavioral_anomaly"
+            "brute_force_ssh",
+            "port_scan",
+            "ml_behavioral_anomaly",
+            "threat_intel_match"
         ]
 
     def execute(self, alert: dict) -> dict | None:

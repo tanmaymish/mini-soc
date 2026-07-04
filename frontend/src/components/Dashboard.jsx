@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Activity, ShieldCheck, Radar, Cpu } from 'lucide-react';
+import { Activity, ShieldCheck, Radar, Cpu, FlaskConical } from 'lucide-react';
 import StatCard from './StatCard';
 import AlertTable from './AlertTable';
-import MitigationTable from './MitigationTable'; // NEW
+import MitigationTable from './MitigationTable';
+import { getDemoAlerts, getDemoMitigations } from '../demoData';
+
+// Demo mode: static build with simulated telemetry (e.g. GitHub Pages,
+// where no backend is attached).
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ||
     (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
 
 export default function Dashboard() {
     const [alerts, setAlerts] = useState([]);
-    const [mitigations, setMitigations] = useState([]); // NEW
+    const [mitigations, setMitigations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [stats, setStats] = useState({
@@ -19,28 +24,35 @@ export default function Dashboard() {
         criticalCount: 0
     });
 
+    const applyData = (alertData, mitigData, totalEvents) => {
+        const sortedAlerts = [...alertData].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setAlerts(sortedAlerts);
+        setMitigations(mitigData);
+
+        const criticalCount = sortedAlerts.filter(a => a.severity === 'critical' || a.severity === 'high').length;
+        setStats({
+            totalLogs: totalEvents.toLocaleString(),
+            totalAlerts: sortedAlerts.length,
+            criticalCount: criticalCount
+        });
+    };
+
     const fetchData = async () => {
+        if (DEMO_MODE) {
+            applyData(getDemoAlerts(), getDemoMitigations(), 10245);
+            setError(null);
+            setLoading(false);
+            return;
+        }
+
         try {
-            const [alertRes, mitigRes] = await Promise.all([
+            const [alertRes, mitigRes, statsRes] = await Promise.all([
                 axios.get(`${API_BASE}/alerts`),
-                axios.get(`${API_BASE}/mitigations`)
+                axios.get(`${API_BASE}/mitigations`),
+                axios.get(`${API_BASE}/ingestion/stats`)
             ]);
 
-            const alertData = alertRes.data.alerts; // FIX: using the correct nested property
-            const sortedAlerts = alertData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-            setAlerts(sortedAlerts);
-
-            const mitigData = mitigRes.data;
-            setMitigations(mitigData);
-
-            const criticalCount = sortedAlerts.filter(a => a.severity === 'critical' || a.severity === 'high').length;
-
-            setStats({
-                totalLogs: '10,245',
-                totalAlerts: sortedAlerts.length,
-                criticalCount: criticalCount
-            });
-
+            applyData(alertRes.data.alerts, mitigRes.data, statsRes.data.total_events ?? 0);
             setError(null);
         } catch (err) {
             console.error("Error fetching SOC data:", err);
@@ -52,6 +64,7 @@ export default function Dashboard() {
 
     useEffect(() => {
         fetchData();
+        if (DEMO_MODE) return;
         const interval = setInterval(fetchData, 3000);
         return () => clearInterval(interval);
     }, []);
@@ -71,19 +84,30 @@ export default function Dashboard() {
                 </div>
 
                 <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-full border border-slate-700 shadow-sm">
-                    <span className="relative flex h-3 w-3">
-                        {error ? (
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                        ) : (
-                            <>
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                            </>
-                        )}
-                    </span>
-                    <span className="text-sm font-medium text-slate-300">
-                        {error ? 'SOAR Engine Offline' : 'SOAR Active (Polling)'}
-                    </span>
+                    {DEMO_MODE ? (
+                        <>
+                            <FlaskConical className="h-3.5 w-3.5 text-amber-400" />
+                            <span className="text-sm font-medium text-amber-300">
+                                Demo Mode — Simulated Telemetry
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <span className="relative flex h-3 w-3">
+                                {error ? (
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                ) : (
+                                    <>
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                                    </>
+                                )}
+                            </span>
+                            <span className="text-sm font-medium text-slate-300">
+                                {error ? 'SOAR Engine Offline' : 'SOAR Active (Polling)'}
+                            </span>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -98,7 +122,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <StatCard title="Total Events Analyzed" value={stats.totalLogs} type="info" />
                 <StatCard title="Active Alerts" value={stats.totalAlerts} type="warning" />
-                <StatCard title="Critcal / High Threats" value={stats.criticalCount} type={stats.criticalCount > 0 ? 'critical' : ''} />
+                <StatCard title="Critical / High Threats" value={stats.criticalCount} type={stats.criticalCount > 0 ? 'critical' : ''} />
             </div>
 
             {/* SOAR Mitigations Feed */}

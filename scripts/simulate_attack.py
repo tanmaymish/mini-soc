@@ -30,7 +30,7 @@ API_URL = "http://localhost:5000"
 
 def send_log(base_url: str, log_line: str):
     """Send a single log line to the ingestion API."""
-    url = f"{base_url}/api/logs"
+    url = f"{base_url}/api/ingestion/logs"
     data = json.dumps({"raw": log_line}).encode("utf-8")
     req = urllib.request.Request(
         url, data=data, headers={"Content-Type": "application/json"}
@@ -260,7 +260,7 @@ def main():
     print("📊 CHECKING ALERT SUMMARY")
     print("=" * 60)
     try:
-        url = f"{args.target}/api/stats"
+        url = f"{args.target}/api/ingestion/stats"
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req) as resp:
             stats = json.loads(resp.read().decode())

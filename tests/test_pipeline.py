@@ -125,4 +125,4 @@ class TestFullPipeline:
 
         stats = self.engine.get_stats()
         assert stats["events_processed"] == 3
-        assert stats["rules_loaded"] == 3
+        assert stats["rules_loaded"] == 5

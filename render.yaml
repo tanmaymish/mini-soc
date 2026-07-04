@@ -1,0 +1,27 @@
+# One-click backend deploy to Render (https://render.com).
+#
+# The React dashboard is hosted free on GitHub Pages; this hosts the Flask
+# SOC API + detection engine. Point it at a serverless Postgres (Neon /
+# Supabase) by setting DATABASE_URL in the Render dashboard — never commit
+# the real connection string.
+#
+# Deploy: New → Blueprint → connect this repo → Render reads render.yaml.
+services:
+  - type: web
+    name: mini-soc-api
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt && python scripts/train_model.py"
+    startCommand: "gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+    healthCheckPath: /health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      # Set this in the Render dashboard (mark as secret):
+      #   DATABASE_URL = postgresql://USER:PASSWORD@HOST/DB?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      - key: ALERT_MIN_SEVERITY
+        value: high

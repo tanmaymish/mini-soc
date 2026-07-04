@@ -17,6 +17,11 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-prod")
     DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
 
+    # Storage backend selection:
+    # If DATABASE_URL is set (e.g. a Neon/Supabase Postgres URL), the
+    # PostgreSQL backend is used. Otherwise MongoDB (docker-compose default).
+    DATABASE_URL = os.getenv("DATABASE_URL")
+
     # MongoDB
     MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
     MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "mini_soc")

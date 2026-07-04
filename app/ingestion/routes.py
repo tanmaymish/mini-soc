@@ -19,7 +19,7 @@ from app.ingestion.syslog_parser import parse_syslog_line
 from app.ingestion.normalizer import normalize_parsed_log, normalize_json_event
 from app.detection.engine import DetectionEngine
 from app.alerting.dispatcher import AlertDispatcher
-from app.storage.mongo import store_event, store_alert, get_alerts, get_alert_stats, is_ip_blocked
+from app.storage import store_event, store_alert, get_alerts, get_alert_stats, count_events, is_ip_blocked
 from app.response.engine import SoarEngine
 
 logger = logging.getLogger("mini_soc.ingestion.routes")
@@ -213,6 +213,6 @@ def list_alerts():
 
 @ingestion_bp.route("/stats", methods=["GET"])
 def alert_stats():
-    """Return alert count grouped by severity."""
+    """Return alert counts by severity plus total events analyzed."""
     stats = get_alert_stats()
-    return jsonify({"stats": stats}), 200
+    return jsonify({"stats": stats, "total_events": count_events()}), 200

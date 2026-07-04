@@ -1,47 +1,87 @@
-from app.detection.rules.base import BaseRule
-from datetime import datetime, timezone
-import uuid
+"""
+Threat Intelligence Match Rule.
+
+ATTACKER BEHAVIOR:
+  Known-bad infrastructure (botnets, Tor exit nodes, scanners) is reused
+  across campaigns. A single packet from a flagged IP is actionable.
+
+DETECTION LOGIC:
+  Enrichment happens at the ingestion layer — the normalizer attaches an
+  `intel` object (reputation score + tags) to each event. This rule fires
+  a critical alert the moment a high-reputation-score IP appears.
+
+REAL-WORLD EQUIVALENT:
+  - Splunk ES Threat Intelligence framework
+  - MISP / OpenCTI indicator matching
+  - CrowdStrike Falcon Intelligence lookups
+"""
+
+from app.detection.rules.base_rule import BaseRule
+from app.models.alert import create_alert
 
 
 class ThreatIntelRule(BaseRule):
     """
-    Triggers an immediate Critical alert if an incoming log 
-    matches an IP with a bad reputation on a Threat Intel Platform.
+    Triggers an immediate critical alert if an incoming log matches an
+    IP with a bad reputation on a Threat Intel Platform.
     """
 
     def __init__(self, config: dict = None):
-        super().__init__(config)
-        # Threshold: any IP with a score over 80 is considered an active threat
-        self.reputation_threshold = 80
+        config = config or {}
+        # Any IP with a score at/over this is considered an active threat
+        self.reputation_threshold = config.get("TI_REPUTATION_THRESHOLD", 80)
 
     @property
     def name(self) -> str:
         return "threat_intel_match"
 
-    def match(self, event: dict) -> dict | None:
+    @property
+    def description(self) -> str:
+        return (
+            "Flags traffic from IPs with a malicious reputation score on "
+            "the Threat Intelligence Platform (botnets, Tor exit nodes, "
+            "known scanners)."
+        )
+
+    @property
+    def severity(self) -> str:
+        # One packet from known-bad infrastructure is a critical incident
+        return "critical"
+
+    def evaluate(self, event: dict) -> dict | None:
         """
-        Since data enrichment happened at the ingestion layer,
-        we just inspect the 'intel' object attached to the event.
+        Enrichment already attached `intel` to the event at ingestion;
+        we just inspect the reputation score.
         """
-        intel = event.get("intel", {})
+        # The normalizer attaches enrichment under metadata.intel; accept a
+        # top-level `intel` too for events submitted pre-enriched via JSON.
+        intel = event.get("intel") or (event.get("metadata") or {}).get("intel") or {}
         score = intel.get("reputation_score", 0)
 
-        if score >= self.reputation_threshold:
-            # We don't need to correlate multiple events. 
-            # ONE SINGLE PACKET from a known APT/Botnet is a critical incident.
-            
-            tags = ", ".join(intel.get("tags", []))
-            
-            alert = {
-                "_id": str(uuid.uuid4()),
-                "rule_name": self.name,
-                "severity": "critical",
-                "source_ip": event.get("source_ip"),
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "status": "new",
-                "evidence": [event], # The single event that fired this
-                "context": f"IP found in Threat Intelligence Platform. Reputation Score: {score}. Tags: [{tags}]"
-            }
-            return alert
+        if score < self.reputation_threshold:
+            return None
 
-        return None
+        tags = ", ".join(intel.get("tags", []))
+        source_ip = event.get("source_ip")
+
+        alert = create_alert(
+            rule_name=self.name,
+            severity=self.severity,
+            source_ip=source_ip,
+            description=(
+                f"Traffic from {source_ip} matches a known threat actor on "
+                f"the Threat Intelligence Platform (score {score}/100)."
+            ),
+            evidence=[event],
+            metadata={
+                "reputation_score": score,
+                "tags": intel.get("tags", []),
+                "provider": intel.get("provider", "unknown"),
+            },
+        )
+        # Rendered in the dashboard's "Threat Intel Match" evidence panel
+        alert["context"] = (
+            f"IP found in Threat Intelligence Platform. "
+            f"Reputation Score: {score}. Tags: [{tags}]"
+        )
+        return alert

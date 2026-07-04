@@ -10,6 +10,9 @@ services:
     environment:
       - FLASK_ENV=development
       - FLASK_DEBUG=1
+      # Storage: leave DATABASE_URL blank to use the bundled MongoDB, or set
+      # it (e.g. a Neon Postgres URL) to switch backends without code changes.
+      - DATABASE_URL=${DATABASE_URL:-}
       - MONGO_URI=mongodb://mongo:27017
       - MONGO_DB_NAME=mini_soc
       - BRUTE_FORCE_THRESHOLD=5

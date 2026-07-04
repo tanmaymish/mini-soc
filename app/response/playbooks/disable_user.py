@@ -9,7 +9,7 @@ simulate disabling their Active Directory/SSO account.
 import logging
 from datetime import datetime, timezone
 from app.response.playbooks.base import BasePlaybook
-from app.storage.mongo import store_mitigation
+from app.storage import store_mitigation
 
 logger = logging.getLogger("mini_soc.soar.disable_user")
 
@@ -29,22 +29,14 @@ class DisableUserPlaybook(BasePlaybook):
         ]
 
     def execute(self, alert: dict) -> dict | None:
-        # We need to extract the username from the raw evidence,
-        # since the main alert only stores the IP.
-        evidence = alert.get("evidence", [])
-        if not evidence:
-            return None
-            
-        # The user attempting sudo
-        target_user = None
-        for evt in evidence:
-            if "SUDO_COMMAND" in evt.get("action", "") or "FAIL" in evt.get("action", ""):
-                # Raw syslog has the user in the payload usually, e.g., "sysadmin"
-                raw_log = evt.get("raw", "")
-                if "for sysadmin" in raw_log or "sysadmin :" in raw_log:
-                    target_user = "sysadmin"
-                elif "for root" in raw_log or "root :" in raw_log:
-                    target_user = "root" # we can't disable root, but we'll flag it
+        # The detection rule records the compromised account in metadata;
+        # fall back to the normalized evidence events if it's absent.
+        target_user = (alert.get("metadata") or {}).get("user")
+
+        if not target_user:
+            for evt in alert.get("evidence", []):
+                if evt.get("user"):
+                    target_user = evt["user"]
 
         if not target_user:
             target_user = "unknown_actor"
