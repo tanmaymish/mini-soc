@@ -36,12 +36,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Auto-enables GitHub Pages (source: GitHub Actions) on first run using
+      # the workflow token's pages:write permission — no manual setup needed.
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - name: Build
         run: npm run build
         env:
           # Demo mode ships simulated telemetry (no backend on Pages).
           VITE_DEMO_MODE: "true"
-          # Pages serves under /<repo>/ — must match the repo name.
+          # Pages serves under /<repo>/ (trailing slash required by Vite).
           VITE_BASE_PATH: "/${{ github.event.repository.name }}/"
 
       - name: Add SPA 404 fallback
