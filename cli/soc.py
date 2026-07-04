@@ -41,7 +41,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app.detection.engine import DetectionEngine
 from app.enrichment.threat_intel import lookup_ip
-from app.ingestion.normalizer import normalize_parsed_log
+from app.ingestion.access_log_parser import parse_access_log_line
+from app.ingestion.normalizer import normalize_access_log, normalize_parsed_log
 from app.ingestion.syslog_parser import parse_syslog_line
 
 
@@ -101,29 +102,47 @@ def print_banner():
 # --- Core: run a stream of raw lines through the detection engine --------
 
 def _iter_events(lines):
-    """Yield (raw_line, normalized_event) for each parseable line."""
+    """
+    Yield (raw_line, normalized_event) for each parseable line.
+
+    Auto-detects the format: syslog / auth.log first, then Nginx/Apache
+    access logs — so a single scan handles mixed sources.
+    """
     for raw in lines:
         raw = raw.rstrip("\n")
         if not raw.strip():
             continue
+
         parsed = parse_syslog_line(raw)
-        if not parsed:
-            continue
-        event = normalize_parsed_log(parsed, raw)
-        if event:
-            yield raw, event
+        if parsed:
+            event = normalize_parsed_log(parsed, raw)
+            if event:
+                yield raw, event
+                continue
+
+        web = parse_access_log_line(raw)
+        if web:
+            event = normalize_access_log(web, raw)
+            if event:
+                yield raw, event
 
 
 def _format_alert(alert, verbose=False):
     src = alert.get("source_ip") or "local"
+    mitre = alert.get("mitre")
+    mitre_tag = c(f" [{mitre['technique']}]", C.CYAN) if mitre else ""
     line = (
         f"{sev_badge(alert['severity'])} "
         f"{c(alert['rule_name'], C.BOLD):<24} "
-        f"src={c(src, C.MAGENTA)}"
+        f"src={c(src, C.MAGENTA)}{mitre_tag}"
     )
     out = [line]
     if verbose:
         out.append(c(f"      {alert.get('description', '')}", C.DIM))
+        if mitre:
+            out.append(c(
+                f"      ATT&CK: {mitre['technique']} {mitre['name']} "
+                f"({mitre['tactic']})", C.CYAN, C.DIM))
     return "\n".join(out)
 
 
@@ -324,6 +343,124 @@ def cmd_demo(args):
     return 0
 
 
+# --- Command: report -----------------------------------------------------
+
+def _scan_file(path):
+    """Run the engine over a file, returning (alerts, stats)."""
+    engine = DetectionEngine()
+    with open(path, "r", errors="replace") as fh:
+        lines = fh.readlines()
+
+    alerts = []
+    ip_counter = Counter()
+    parsed = 0
+    for _, event in _iter_events(lines):
+        parsed += 1
+        if event.get("source_ip"):
+            ip_counter[event["source_ip"]] += 1
+        alerts.extend(engine.evaluate(event))
+
+    return alerts, {
+        "lines": len(lines),
+        "events": parsed,
+        "ips": ip_counter,
+    }
+
+
+def _html_escape(s):
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def cmd_report(args):
+    if not os.path.exists(args.logfile):
+        print(c(f"error: file not found: {args.logfile}", C.RED))
+        return 2
+
+    from datetime import datetime, timezone
+
+    alerts, stats = _scan_file(args.logfile)
+    sev_counts = Counter(a["severity"] for a in alerts)
+    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    sev_colors = {
+        "critical": "#ef4444", "high": "#f59e0b",
+        "medium": "#eab308", "low": "#3b82f6", "info": "#64748b",
+    }
+
+    rows = []
+    for a in alerts:
+        mitre = a.get("mitre") or {}
+        sev = a["severity"]
+        rows.append(f"""
+        <tr>
+          <td><span class="badge" style="background:{sev_colors.get(sev, '#64748b')}22;
+              color:{sev_colors.get(sev, '#64748b')};border:1px solid {sev_colors.get(sev, '#64748b')}55">
+              {sev.upper()}</span></td>
+          <td class="mono">{_html_escape(a['rule_name'])}</td>
+          <td class="mono">{_html_escape(a.get('source_ip') or 'local')}</td>
+          <td>{_html_escape(mitre.get('technique', '—'))} {_html_escape(mitre.get('name', ''))}</td>
+          <td class="desc">{_html_escape(a.get('description', ''))}</td>
+        </tr>""")
+
+    tiles = "".join(
+        f"""<div class="tile"><div class="num" style="color:{sev_colors[s]}">{sev_counts.get(s, 0)}</div>
+        <div class="lbl">{s.title()}</div></div>"""
+        for s in ("critical", "high", "medium", "low")
+    )
+
+    top_ips = "".join(
+        f"<li><span class='mono'>{_html_escape(ip)}</span> — {n} events</li>"
+        for ip, n in stats["ips"].most_common(10)
+    )
+
+    html = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini SOC Incident Report</title>
+<style>
+  :root {{ color-scheme: dark; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; background:#0f172a; color:#e2e8f0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }}
+  .wrap {{ max-width: 1000px; margin: 0 auto; padding: 32px 20px 64px; }}
+  h1 {{ font-size: 1.6rem; margin: 0 0 4px; }}
+  .sub {{ color:#94a3b8; font-size:.9rem; margin-bottom: 24px; }}
+  .tiles {{ display:grid; grid-template-columns: repeat(4, 1fr); gap:14px; margin-bottom:28px; }}
+  .tile {{ background:#1e293b; border:1px solid #334155; border-radius:12px; padding:18px; text-align:center; }}
+  .tile .num {{ font-size:2rem; font-weight:800; }}
+  .tile .lbl {{ color:#94a3b8; font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; }}
+  h2 {{ font-size:1.05rem; margin: 26px 0 12px; }}
+  table {{ width:100%; border-collapse:collapse; background:#1e293b;
+    border:1px solid #334155; border-radius:12px; overflow:hidden; font-size:.86rem; }}
+  th {{ text-align:left; padding:12px; background:#0f172a; color:#94a3b8;
+    text-transform:uppercase; font-size:.72rem; letter-spacing:.05em; }}
+  td {{ padding:12px; border-top:1px solid #334155; vertical-align:top; }}
+  .desc {{ color:#cbd5e1; }}
+  .mono {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+  .badge {{ padding:3px 9px; border-radius:99px; font-size:.7rem; font-weight:700; }}
+  ul {{ line-height:1.9; }}
+  .ok {{ background:#10b98122; border:1px solid #10b98155; color:#34d399;
+    padding:18px; border-radius:12px; }}
+  footer {{ margin-top:36px; color:#64748b; font-size:.8rem; }}
+</style></head><body><div class="wrap">
+  <h1>🛡️ Mini SOC — Incident Report</h1>
+  <div class="sub">Source: <span class="mono">{_html_escape(args.logfile)}</span>
+    · {stats['events']} events analyzed · {len(alerts)} alert(s) · Generated {generated}</div>
+  <div class="tiles">{tiles}</div>
+  {"<h2>Detections</h2><table><thead><tr><th>Severity</th><th>Rule</th><th>Source IP</th><th>ATT&CK</th><th>Detail</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>" if alerts else '<div class="ok">✓ No threats detected. Logs look clean.</div>'}
+  <h2>Top Source IPs</h2><ul>{top_ips or "<li>none</li>"}</ul>
+  <footer>Generated by the <b>Mini SOC</b> CLI · github.com/tanmaymish/mini-soc</footer>
+</div></body></html>"""
+
+    with open(args.output, "w") as fh:
+        fh.write(html)
+
+    print(c(f"  ✓ Report written to {args.output}", C.GREEN, C.BOLD))
+    print(c(f"    {len(alerts)} alert(s) · open it in a browser to view/share.", C.DIM))
+    return 0
+
+
 # --- Entry point ---------------------------------------------------------
 
 def build_parser():
@@ -353,6 +490,12 @@ def build_parser():
     pd = sub.add_parser("demo", help="Run built-in attack scenarios through the engine")
     pd.add_argument("--quiet", action="store_true", help="Suppress the banner")
     pd.set_defaults(func=cmd_demo)
+
+    pr = sub.add_parser("report", help="Generate a shareable HTML incident report")
+    pr.add_argument("logfile", help="Path to a log file to analyze")
+    pr.add_argument("-o", "--output", default="soc-report.html",
+                    help="Output HTML path (default: soc-report.html)")
+    pr.set_defaults(func=cmd_report)
 
     return p
 

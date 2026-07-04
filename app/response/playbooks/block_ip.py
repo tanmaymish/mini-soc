@@ -32,7 +32,8 @@ class BlockIPPlaybook(BasePlaybook):
             "brute_force_ssh",
             "port_scan",
             "ml_behavioral_anomaly",
-            "threat_intel_match"
+            "threat_intel_match",
+            "web_attack"
         ]
 
     def execute(self, alert: dict) -> dict | None:

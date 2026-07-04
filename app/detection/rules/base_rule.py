@@ -44,6 +44,19 @@ class BaseRule(ABC):
         """Default severity: low, medium, high, critical."""
         pass
 
+    @property
+    def mitre(self) -> dict | None:
+        """
+        MITRE ATT&CK technique this rule maps to, e.g.
+        {"technique": "T1110", "name": "Brute Force",
+         "tactic": "Credential Access"}.
+
+        Returns None for rules with no clean technique mapping. The engine
+        stamps this onto every alert the rule produces so analysts (and the
+        dashboard) can pivot straight to ATT&CK.
+        """
+        return None
+
     @abstractmethod
     def evaluate(self, event: dict) -> dict | None:
         """

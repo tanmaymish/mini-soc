@@ -88,12 +88,26 @@ class MLAnomalyRule(BaseRule):
         # Anomalies usually warrant investigation but aren't always definitive attacks
         return "high"
 
+    @property
+    def mitre(self) -> dict:
+        return {
+            "technique": "T1078",
+            "name": "Valid Accounts",
+            "tactic": "Defense Evasion",
+        }
+
     def evaluate(self, event: dict) -> dict | None:
         """
         Extract real-time features and score against the ML model.
         """
         if self.model is None:
             return None  # Model not loaded, silently skip
+
+        # The model is baselined on auth/connection behavior (velocity, ports,
+        # failed logins). Web requests are a different feature domain and are
+        # handled by WebAttackRule, so don't score them here.
+        if event.get("action") == "WEB_REQUEST":
+            return None
 
         source_ip = event.get("source_ip")
         if not source_ip:

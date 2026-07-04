@@ -64,6 +64,14 @@ class PrivilegeEscalationRule(BaseRule):
     def severity(self) -> str:
         return "critical"
 
+    @property
+    def mitre(self) -> dict:
+        return {
+            "technique": "T1548",
+            "name": "Abuse Elevation Control Mechanism",
+            "tactic": "Privilege Escalation",
+        }
+
     def evaluate(self, event: dict) -> dict | None:
         """
         Correlate failed logins with subsequent sudo usage.

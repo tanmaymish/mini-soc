@@ -48,6 +48,14 @@ class ThreatIntelRule(BaseRule):
         # One packet from known-bad infrastructure is a critical incident
         return "critical"
 
+    @property
+    def mitre(self) -> dict:
+        return {
+            "technique": "T1071",
+            "name": "Application Layer Protocol",
+            "tactic": "Command and Control",
+        }
+
     def evaluate(self, event: dict) -> dict | None:
         """
         Enrichment already attached `intel` to the event at ingestion;

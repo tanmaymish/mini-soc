@@ -58,6 +58,14 @@ class PortScanRule(BaseRule):
     def severity(self) -> str:
         return "high"
 
+    @property
+    def mitre(self) -> dict:
+        return {
+            "technique": "T1046",
+            "name": "Network Service Discovery",
+            "tactic": "Discovery",
+        }
+
     def evaluate(self, event: dict) -> dict | None:
         """
         Check if this connection contributes to a port scan pattern.

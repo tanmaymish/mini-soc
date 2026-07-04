@@ -97,8 +97,20 @@ Mini SOC is built with modern release engineering in mind.
 - Uses a **Threat Intelligence Module** to dynamically query external IPs and tag incoming logs with reputation scores and actor archetypes (e.g. `TOR_EXIT_NODE`, `BOTNET`).
 
 ### 2. 🧠 Hybrid Threat Detection
-Uses a multi-layered approach to threat hunting:
-- **Rule-Based Trips:** Detects traditional lateral movement (Port Scans), high-velocity attacks (Brute Force), and localized internal attacks (Privilege Escalation via `sudo`).
+Uses a multi-layered approach to threat hunting, and every rule is mapped to a
+**MITRE ATT&CK technique**:
+
+| Rule | Detects | ATT&CK |
+|------|---------|--------|
+| `brute_force_ssh` | N failed logins from one IP in a window | [T1110](https://attack.mitre.org/techniques/T1110/) |
+| `port_scan` | One IP probing many distinct ports | [T1046](https://attack.mitre.org/techniques/T1046/) |
+| `privilege_escalation` | `sudo` right after failed auth | [T1548](https://attack.mitre.org/techniques/T1548/) |
+| `ml_behavioral_anomaly` | Statistical outliers (Isolation Forest) | [T1078](https://attack.mitre.org/techniques/T1078/) |
+| `threat_intel_match` | Traffic from known-bad IPs | [T1071](https://attack.mitre.org/techniques/T1071/) |
+| `web_attack` | SQLi, XSS, path traversal, scanners in web logs | [T1190](https://attack.mitre.org/techniques/T1190/) |
+
+- **Rule-Based Trips:** Traditional lateral movement (Port Scans), high-velocity attacks (Brute Force), and localized internal attacks (Privilege Escalation via `sudo`).
+- **Web Attack Detection:** WAF-style signatures catch SQL injection, XSS, path traversal, command injection, and automated scanners (sqlmap, nikto, nuclei) in Nginx/Apache access logs.
 - **Machine Learning (Isolation Forests):** An offline-trained baseline model detects statistical anomalies in network behavior, flagging attacks that try to fly "under the radar".
 - **Threat Intel Matching:** Instantly flags incoming logs from known malicious IPs.
 
@@ -121,22 +133,31 @@ cd mini-soc
 pip install -r requirements.txt
 python scripts/train_model.py          # build the baseline ML model (offline)
 
-# 🔍 Scan any log file → colorized threat report + recommended firewall blocks
+# 🔍 Scan an SSH/auth log → threat report + recommended firewall blocks
 python -m cli scan sample_logs/auth.log
+
+# 🌐 Scan an Nginx/Apache access log → catches SQLi, XSS, traversal, scanners
+python -m cli scan sample_logs/access.log
+
+# 📄 Generate a shareable, self-contained HTML incident report
+python -m cli report sample_logs/access.log -o incident.html
 
 # 📡 Live-tail a real log and watch detections fire in real time
 sudo python -m cli watch /var/log/auth.log
 
-# 🌐 Check any IP against the threat-intel database
+# 🌍 Check any IP against the threat-intel database
 python -m cli ip 185.220.101.1
 
 # 🎬 Fire every built-in attack scenario through the engine (great for demos)
 python -m cli demo
 ```
 
-A `soc scan` reports every triggered rule, ranks the noisiest source IPs, and
-prints copy-paste `iptables` commands to contain the attackers it found. Add
-`--json` to any command to pipe results into your own tooling.
+`soc scan` **auto-detects the log format** (syslog/auth *or* web access logs),
+reports every triggered rule tagged with its **MITRE ATT&CK technique**, ranks
+the noisiest source IPs, and prints copy-paste `iptables` commands to contain
+the attackers it found. Add `--json` to any command to pipe results into your
+own tooling. Every rule maps to ATT&CK, so alerts link straight to
+`attack.mitre.org`.
 
 ---
 

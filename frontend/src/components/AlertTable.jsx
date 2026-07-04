@@ -56,6 +56,18 @@ export default function AlertTable({ alerts }) {
                                 </td>
                                 <td className="px-6 py-4 font-medium font-mono text-slate-200">
                                     {alert.rule_name}
+                                    {alert.mitre && (
+                                        <a
+                                            href={`https://attack.mitre.org/techniques/${alert.mitre.technique}/`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            title={`${alert.mitre.name} · ${alert.mitre.tactic}`}
+                                            className="ml-2 text-xs font-semibold text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 rounded px-1.5 py-0.5 align-middle"
+                                        >
+                                            {alert.mitre.technique}
+                                        </a>
+                                    )}
                                 </td>
                                 <td className="px-6 py-4 font-mono text-brand-400">
                                     {alert.source_ip}

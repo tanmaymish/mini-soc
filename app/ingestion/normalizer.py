@@ -64,6 +64,49 @@ def normalize_parsed_log(parsed: dict, raw_log: str) -> dict:
     return event
 
 
+def normalize_access_log(parsed: dict, raw_log: str) -> dict:
+    """
+    Convert a parsed web access-log dict into a normalized event.
+
+    Web-specific fields (path, query, user_agent, ...) are kept at the top
+    level so the WebAttackRule can inspect them directly. The source IP is
+    still run through threat-intel enrichment, so a known-bad IP hitting your
+    web server also trips the ThreatIntelRule.
+    """
+    if parsed is None:
+        return None
+
+    source_ip = parsed.get("source_ip", "")
+    intel_data = lookup_ip(source_ip) if source_ip else {
+        "reputation_score": 0, "tags": [], "provider": "mock",
+    }
+
+    event = create_log_event(
+        raw_log=raw_log,
+        timestamp=parsed.get("timestamp"),
+        source_ip=source_ip,
+        hostname=None,
+        service="web",
+        action="WEB_REQUEST",
+        user=None,
+        destination_port=parsed.get("destination_port"),
+        severity="info",
+        metadata={"intel": intel_data, "status": parsed.get("status")},
+    )
+
+    # Attach web-request details for the detection rules.
+    event.update({
+        "http_method": parsed.get("http_method"),
+        "path": parsed.get("path"),
+        "query": parsed.get("query"),
+        "url": parsed.get("url"),
+        "status": parsed.get("status"),
+        "user_agent": parsed.get("user_agent"),
+        "referer": parsed.get("referer"),
+    })
+    return event
+
+
 def normalize_json_event(data: dict) -> dict:
     """
     Normalize a JSON-submitted event (from API).

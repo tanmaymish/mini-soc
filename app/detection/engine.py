@@ -21,6 +21,7 @@ from app.detection.rules.port_scan import PortScanRule
 from app.detection.rules.priv_escalation import PrivilegeEscalationRule
 from app.detection.rules.anomaly_rule import MLAnomalyRule
 from app.detection.rules.threat_intel_match import ThreatIntelRule
+from app.detection.rules.web_attack import WebAttackRule
 
 logger = logging.getLogger("mini_soc.detection.engine")
 
@@ -45,6 +46,7 @@ class DetectionEngine:
             ),
             PrivilegeEscalationRule(),
             MLAnomalyRule(),
+            WebAttackRule(),
         ]
 
         # Stats tracking
@@ -71,6 +73,9 @@ class DetectionEngine:
             try:
                 alert = rule.evaluate(event)
                 if alert is not None:
+                    # Stamp the ATT&CK mapping onto every alert uniformly.
+                    if rule.mitre and "mitre" not in alert:
+                        alert["mitre"] = rule.mitre
                     alerts.append(alert)
                     self._alerts_generated += 1
                     logger.info(

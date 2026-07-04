@@ -88,3 +88,44 @@ def test_demo_generates_alerts():
     assert code == 0
     assert "alert(s) generated" in out
     assert "threat_intel_match" in out
+
+
+def test_scan_web_access_log(tmp_path):
+    log = tmp_path / "access.log"
+    log.write_text(
+        '45.1.2.3 - - [04/Jul/2026:09:15:41 +0000] '
+        '"GET /p?id=1%20UNION%20SELECT%20x HTTP/1.1" 500 1 "-" "sqlmap/1.7"\n'
+    )
+    code, out = _run(["scan", str(log), "--quiet"])
+    assert code == 1
+    assert "web_attack" in out
+    assert "T1190" in out  # MITRE technique shown
+
+
+def test_report_writes_html(tmp_path):
+    log = tmp_path / "access.log"
+    log.write_text(
+        '45.1.2.3 - - [04/Jul/2026:09:15:41 +0000] '
+        '"GET /p?id=1%20UNION%20SELECT%20x HTTP/1.1" 500 1 "-" "sqlmap/1.7"\n'
+    )
+    out_html = tmp_path / "report.html"
+    code, _ = _run(["report", str(log), "-o", str(out_html)])
+    assert code == 0
+    html = out_html.read_text()
+    assert html.startswith("<!doctype html>")
+    assert "web_attack" in html
+    assert "T1190" in html
+    # Self-contained: no external resource fetches.
+    assert "src=\"http" not in html and "href=\"http" not in html
+
+
+def test_mitre_stamped_on_alerts(tmp_path):
+    log = tmp_path / "auth.log"
+    lines = [
+        f"Mar 30 14:21:1{i} server01 sshd[{12341+i}]: "
+        f"Failed password for root from 192.168.1.100 port 22 ssh2"
+        for i in range(6)
+    ]
+    log.write_text("\n".join(lines) + "\n")
+    _, out = _run(["scan", str(log), "--quiet"])
+    assert "T1110" in out  # brute force ATT&CK technique

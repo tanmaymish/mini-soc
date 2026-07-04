@@ -55,6 +55,14 @@ class BruteForceRule(BaseRule):
     def severity(self) -> str:
         return "high"
 
+    @property
+    def mitre(self) -> dict:
+        return {
+            "technique": "T1110",
+            "name": "Brute Force",
+            "tactic": "Credential Access",
+        }
+
     def evaluate(self, event: dict) -> dict | None:
         """
         Check if this event contributes to a brute force pattern.

@@ -48,9 +48,14 @@ jobs:
 
       - name: Smoke-test the SOC CLI
         run: |
-          python -m cli scan sample_logs/auth.log --quiet
+          # `scan` and `ip` return exit code 1 when they DETECT a threat —
+          # that's the tool working as designed (grep-style), not an error.
+          # Accept 0/1 as success; only a real crash (exit >= 2) fails CI.
+          python -m cli scan sample_logs/auth.log --quiet || [ $? -eq 1 ]
+          python -m cli scan sample_logs/access.log --quiet || [ $? -eq 1 ]
+          python -m cli ip 185.220.101.1 --json || [ $? -eq 1 ]
+          python -m cli report sample_logs/access.log -o /tmp/report.html
           python -m cli demo --quiet
-          python -m cli ip 185.220.101.1 --json
 
       - name: Smoke-test the API against PostgreSQL
         env:
