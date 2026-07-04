@@ -37,9 +37,14 @@ export default function IncidentsPanel({ incidents }) {
                                 <div className="font-mono text-[11px] text-slate-500">{inc.incident_id}</div>
                             </div>
                         </div>
-                        <span className={clsx('px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border', SEV[inc.severity])}>
-                            {inc.severity}
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <span className={clsx('px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border', SEV[inc.severity])}>
+                                {inc.severity}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border border-emerald-500/40 bg-emerald-500/10 text-emerald-400">
+                                ● Contained
+                            </span>
+                        </div>
                     </div>
 
                     {/* Kill chain */}

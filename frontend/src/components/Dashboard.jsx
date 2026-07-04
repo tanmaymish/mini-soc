@@ -8,6 +8,10 @@ import AttackSimulator from './AttackSimulator';
 import ThreatCharts from './ThreatCharts';
 import LiveConsole from './LiveConsole';
 import IncidentsPanel from './IncidentsPanel';
+import DetectionRules from './DetectionRules';
+import ApiMapPanel from './ApiMapPanel';
+import RiskActors from './RiskActors';
+import PlaybooksPanel from './PlaybooksPanel';
 import { getDemoAlerts, getDemoMitigations } from '../demoData';
 import { ATTACK_KEYS, buildAttack, benignLog, correlateAlerts } from '../simEngine';
 
@@ -198,8 +202,17 @@ export default function Dashboard() {
                 <StatCard title="Critical / High Threats" value={criticalCount} type={criticalCount > 0 ? 'critical' : ''} />
             </div>
 
+            {/* Detection rule engine — the actual rules + live match counts */}
+            <DetectionRules alerts={alerts} />
+
             {/* Charts */}
             <ThreatCharts alerts={alerts} timeline={timeline} />
+
+            {/* API mapping (endpoint→service→risk) + per-actor risk scoring */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+                <ApiMapPanel />
+                <RiskActors alerts={alerts} />
+            </div>
 
             {/* Correlated Incidents — multi-stage attacks stitched into a kill-chain */}
             <div className="mb-8">
@@ -215,6 +228,11 @@ export default function Dashboard() {
                     )}
                 </div>
                 <IncidentsPanel incidents={incidents} />
+            </div>
+
+            {/* SOAR playbooks — trigger → automated action, with live exec counts */}
+            <div className="mb-8">
+                <PlaybooksPanel mitigations={mitigations} />
             </div>
 
             {/* Live log console (demo only) */}

@@ -325,6 +325,67 @@ export function buildAttack(key) {
     return ATTACKS[key].build();
 }
 
+// ---------------------------------------------------------------------------
+// Engine catalogs — these mirror the real Python backend so the UI can show
+// the actual rule logic, API mapping, and SOAR playbooks (not just events).
+// ---------------------------------------------------------------------------
+
+// The 10 detection rules that run in app/detection/rules/*.py
+export const RULES = [
+    { name: 'threat_intel_match', category: 'Reputation', severity: 'critical', mitre: MITRE.threat_intel_match,
+      logic: 'IP reputation score ≥ 80 (TOR / botnet / scanner feeds)' },
+    { name: 'brute_force_ssh', category: 'Threshold', severity: 'high', mitre: MITRE.brute_force_ssh,
+      logic: '≥ 5 failed logins from one IP within 60s' },
+    { name: 'port_scan', category: 'Velocity', severity: 'high', mitre: MITRE.port_scan,
+      logic: '≥ 10 distinct ports from one IP within 30s' },
+    { name: 'privilege_escalation', category: 'Correlation', severity: 'critical', mitre: MITRE.privilege_escalation,
+      logic: 'sudo executed after a failed auth by the same user (≤ 300s)' },
+    { name: 'ml_behavioral_anomaly', category: 'Machine Learning', severity: 'high', mitre: MITRE.ml_behavioral_anomaly,
+      logic: 'Isolation Forest flags the event vs. learned baseline' },
+    { name: 'web_attack', category: 'Signature (WAF)', severity: 'critical', mitre: MITRE.web_attack,
+      logic: 'SQLi / XSS / traversal / cmd-injection or scanner User-Agent' },
+    { name: 'admin_endpoint_abuse', category: 'Access Control', severity: 'critical', mitre: MITRE.admin_endpoint_abuse,
+      logic: 'non-admin 2xx on /api/admin, or 3× 401/403 on admin plane' },
+    { name: 'graphql_abuse', category: 'Content', severity: 'high', mitre: MITRE.graphql_abuse,
+      logic: 'introspection (__schema), query depth > 8, or mutation' },
+    { name: 'api_abuse', category: 'Rate / Recon', severity: 'high', mitre: MITRE.api_abuse,
+      logic: '> 20 requests/30s, or ≥ 8 distinct paths / 404s' },
+    { name: 'token_anomaly', category: 'Identity', severity: 'critical', mitre: MITRE.token_anomaly,
+      logic: 'token seen from a new IP, or accessing a 2nd tenant (IDOR)' },
+];
+
+// app/detection/api_map.py — endpoint → security domain → base risk
+export const API_ROUTES = [
+    { pattern: '/api/admin/*', re: /^\/api\/admin(\/|$)/i, service: 'Admin Control Plane', risk: 'high', watched: ['admin_endpoint_abuse', 'api_abuse'] },
+    { pattern: '/api/login · /api/auth · /api/token', re: /^\/api\/(login|logout|auth|token|oauth)/i, service: 'Authentication Service', risk: 'medium', watched: ['brute_force_ssh', 'token_anomaly'] },
+    { pattern: '/api/graphql', re: /^\/api\/graphql/i, service: 'API Gateway (GraphQL)', risk: 'variable', watched: ['graphql_abuse', 'api_abuse'] },
+    { pattern: '/api/users · /api/identity · /api/profile', re: /^\/api\/(users?|identity|profile|account)/i, service: 'Identity Service', risk: 'medium', watched: ['token_anomaly', 'api_abuse'] },
+    { pattern: '/api/payments · /api/billing', re: /^\/api\/(payments?|billing|invoices?|checkout)/i, service: 'Payment Service', risk: 'high', watched: ['api_abuse', 'token_anomaly'] },
+    { pattern: '/api/internal/*', re: /^\/api\/internal(\/|$)/i, service: 'Internal Service', risk: 'high', watched: ['api_abuse'] },
+    { pattern: '/api/*', re: /^\/api\//i, service: 'General API', risk: 'low', watched: ['api_abuse', 'web_attack'] },
+];
+
+export function mapEndpoint(path) {
+    for (const r of API_ROUTES) {
+        if (r.re.test(path || '')) return r;
+    }
+    return { pattern: '(unmapped)', service: 'Unmapped Endpoint', risk: 'low', watched: [] };
+}
+
+// app/response/playbooks/*.py — SOAR automation
+export const PLAYBOOKS = [
+    { name: 'block_malicious_ip', action: 'BLOCK_IP', effect: 'Drops the source IP at the ingestion firewall',
+      triggers: ['threat_intel_match', 'brute_force_ssh', 'port_scan', 'ml_behavioral_anomaly', 'web_attack'] },
+    { name: 'disable_compromised_user', action: 'DISABLE_USER', effect: 'Quarantines the compromised account',
+      triggers: ['privilege_escalation'] },
+    { name: 'rate_limit_source', action: 'RATE_LIMIT', effect: 'Throttles the abusive source at the API gateway',
+      triggers: ['api_abuse', 'graphql_abuse'] },
+    { name: 'require_reauthentication', action: 'REQUIRE_REAUTH', effect: 'Invalidates the session; forces re-auth',
+      triggers: ['token_anomaly'] },
+    { name: 'disable_session', action: 'DISABLE_SESSION', effect: 'Terminates the offending admin session',
+      triggers: ['admin_endpoint_abuse'] },
+];
+
 /**
  * Client-side correlation engine — mirrors app/correlation/engine.py.
  * Groups alerts by actor (source IP); an actor with >= 2 distinct rule types
