@@ -3,10 +3,13 @@ import { Terminal } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function LiveConsole({ lines }) {
-    const endRef = useRef(null);
+    const scrollRef = useRef(null);
 
+    // Keep the console pinned to the newest line WITHOUT scrolling the page.
+    // (scrollIntoView would drag the whole window up on every new log line.)
     useEffect(() => {
-        endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        const el = scrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
     }, [lines]);
 
     return (
@@ -23,7 +26,7 @@ export default function LiveConsole({ lines }) {
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> streaming
                 </span>
             </div>
-            <div className="h-56 overflow-y-auto px-4 py-3 font-mono text-xs leading-relaxed">
+            <div ref={scrollRef} className="h-56 overflow-y-auto px-4 py-3 font-mono text-xs leading-relaxed">
                 {lines.length === 0 && (
                     <div className="text-slate-600">waiting for traffic…</div>
                 )}
@@ -40,7 +43,6 @@ export default function LiveConsole({ lines }) {
                         {l.raw}
                     </div>
                 ))}
-                <div ref={endRef} />
             </div>
         </div>
     );
