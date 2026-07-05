@@ -5,24 +5,20 @@ on:
     branches: ["master", "main"]
   workflow_dispatch:
 
-# Allow the workflow to publish to Pages
+# Publish to the gh-pages branch (classic branch-based Pages pipeline).
+# This is more reliable than the Actions deployment API, which rate-limits
+# republishes ("Deployment failed, try again later") under frequent deploys.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
-# One deploy at a time; don't cancel an in-progress run
 concurrency:
-  group: pages
+  group: pages-ghbranch
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build dashboard (demo mode)
+  build-and-publish:
+    name: Build & publish to gh-pages
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -34,38 +30,26 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
+        working-directory: frontend
         run: npm ci
 
-      # Reads the existing Pages config (Pages must be enabled once in
-      # Settings → Pages → Source: GitHub Actions).
-      - name: Setup Pages
-        id: pages
-        uses: actions/configure-pages@v5
-
-      - name: Build
+      - name: Build (demo mode)
+        working-directory: frontend
         run: npm run build
         env:
-          # Demo mode ships simulated telemetry (no backend on Pages).
           VITE_DEMO_MODE: "true"
           # Pages serves under /<repo>/ (trailing slash required by Vite).
           VITE_BASE_PATH: "/${{ github.event.repository.name }}/"
 
-      - name: Add SPA 404 fallback
-        run: cp dist/index.html dist/404.html
+      - name: SPA 404 fallback + disable Jekyll
+        working-directory: frontend
+        run: |
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: frontend/dist
-
-  deploy:
-    name: Deploy to GitHub Pages
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./frontend/dist
+          publish_branch: gh-pages
