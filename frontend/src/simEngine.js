@@ -325,6 +325,36 @@ export function buildAttack(key) {
     return ATTACKS[key].build();
 }
 
+// Approximate geolocation for demo IP ranges (for the threat map).
+const GEO = {
+    '185.220.101': { city: 'Frankfurt', cc: 'DE', lat: 50.11, lon: 8.68 },
+    '185.220.55': { city: 'Amsterdam', cc: 'NL', lat: 52.37, lon: 4.90 },
+    '45.155.205': { city: 'Moscow', cc: 'RU', lat: 55.75, lon: 37.62 },
+    '45.83.16': { city: 'Kyiv', cc: 'UA', lat: 50.45, lon: 30.52 },
+    '91.219.29': { city: 'Bucharest', cc: 'RO', lat: 44.43, lon: 26.10 },
+    '91.240.118': { city: 'Sofia', cc: 'BG', lat: 42.70, lon: 23.32 },
+    '194.32.122': { city: 'London', cc: 'GB', lat: 51.51, lon: -0.13 },
+    '203.0.113': { city: 'Sydney', cc: 'AU', lat: -33.87, lon: 151.21 },
+    '104.244.72': { city: 'New York', cc: 'US', lat: 40.71, lon: -74.0 },
+    '66.249.66': { city: 'Mountain View', cc: 'US', lat: 37.42, lon: -122.08 },
+};
+
+// SOC location (the defended network) — arcs terminate here.
+export const SOC_GEO = { city: 'HQ', lat: 39.0, lon: -77.0 };
+
+export function geoForIP(ip) {
+    if (!ip) return null;
+    if (ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.'))
+        return { city: 'Internal', cc: 'LAN', lat: 41.0, lon: -74.5, internal: true };
+    const p3 = ip.split('.').slice(0, 3).join('.');
+    if (GEO[p3]) return GEO[p3];
+    // Deterministic pseudo-geo for unknown IPs, biased to populated bands.
+    const n = ip.split('.').reduce((s, o) => s * 256 + (+o || 0), 0);
+    const lon = ((n % 340) - 170);
+    const lat = 15 + ((Math.floor(n / 340) % 90) - 45) * 0.9;
+    return { city: 'Unknown', cc: '??', lat, lon };
+}
+
 // ---------------------------------------------------------------------------
 // Engine catalogs — these mirror the real Python backend so the UI can show
 // the actual rule logic, API mapping, and SOAR playbooks (not just events).
