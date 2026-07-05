@@ -7,6 +7,7 @@ import MitigationTable from './MitigationTable';
 import AttackSimulator from './AttackSimulator';
 import ThreatCharts from './ThreatCharts';
 import LiveConsole from './LiveConsole';
+import LiveAttackMap from './LiveAttackMap';
 import IncidentsPanel from './IncidentsPanel';
 import DetectionRules from './DetectionRules';
 import ApiMapPanel from './ApiMapPanel';
@@ -201,6 +202,9 @@ export default function Dashboard() {
                 <StatCard title="Active Alerts" value={alerts.length} type="warning" />
                 <StatCard title="Critical / High Threats" value={criticalCount} type={criticalCount > 0 ? 'critical' : ''} />
             </div>
+
+            {/* Live global attack map — geolocated arcs to the SOC */}
+            <LiveAttackMap alerts={alerts} />
 
             {/* Detection rule engine — the actual rules + live match counts */}
             <DetectionRules alerts={alerts} />

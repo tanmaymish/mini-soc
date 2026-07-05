@@ -60,6 +60,17 @@ body::before {
   animation: rowFlash 1.6s ease-out, rowIn 0.35s ease-out;
 }
 
+/* Live attack map: arc fade + origin ping */
+@keyframes arcFade {
+  0%   { stroke-opacity: 0; }
+  20%  { stroke-opacity: 0.8; }
+  100% { stroke-opacity: 0; }
+}
+@keyframes ping {
+  0%   { r: 3; opacity: 0.9; }
+  100% { r: 12; opacity: 0; }
+}
+
 /* Custom scrollbar for dark mode */
 ::-webkit-scrollbar {
   width: 8px;
