@@ -60,6 +60,15 @@ body::before {
   animation: rowFlash 1.6s ease-out, rowIn 0.35s ease-out;
 }
 
+/* Toast slide-in from the bottom-right */
+@keyframes toastIn {
+  0%   { opacity: 0; transform: translateX(12px) translateY(6px); }
+  100% { opacity: 1; transform: translateX(0) translateY(0); }
+}
+.toast-in {
+  animation: toastIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* Live attack map: arc fade + origin ping */
 @keyframes arcFade {
   0%   { stroke-opacity: 0; }

@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Activity, ShieldCheck, Radar, Cpu, FlaskConical, GitBranch } from 'lucide-react';
 import StatCard from './StatCard';
 import AlertTable from './AlertTable';
+import AlertToolbar from './AlertToolbar';
 import MitigationTable from './MitigationTable';
 import AttackSimulator from './AttackSimulator';
 import ThreatCharts from './ThreatCharts';
@@ -13,8 +14,10 @@ import DetectionRules from './DetectionRules';
 import ApiMapPanel from './ApiMapPanel';
 import RiskActors from './RiskActors';
 import PlaybooksPanel from './PlaybooksPanel';
+import Toasts from './Toasts';
 import { getDemoAlerts, getDemoMitigations } from '../demoData';
 import { ATTACK_KEYS, buildAttack, benignLog, correlateAlerts } from '../simEngine';
+import { STATUS_META, normStatus, isOpen, alertKey } from '../alertStatus';
 
 // Demo mode: interactive, self-contained build (e.g. GitHub Pages).
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
@@ -23,8 +26,10 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ||
     (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
 
 const TIMELINE_BUCKETS = 24;
+const SEARCH_INPUT_ID = 'alert-search';
 const clock = () => new Date().toLocaleTimeString('en-GB');
 let _lid = 0;
+let _tid = 0;
 
 function makeTimeline() {
     return Array.from({ length: TIMELINE_BUCKETS }, (_, i) => ({ t: '', count: 0, _k: i }));
@@ -41,7 +46,68 @@ export default function Dashboard() {
     const [eventsAnalyzed, setEventsAnalyzed] = useState(10245);
     const [liveIncidents, setLiveIncidents] = useState([]);
 
+    // Analyst interactivity: triage decisions, manual containment, feedback.
+    const [triage, setTriage] = useState({});          // alertKey → status
+    const [manualMitigations, setManualMitigations] = useState([]);
+    const [filter, setFilter] = useState({ sev: 'all', status: 'all', q: '' });
+    const [toasts, setToasts] = useState([]);
+
     const bucketHits = useRef(0);
+
+    const dismissToast = useCallback((id) => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, []);
+
+    const addToast = useCallback((text, tone = 'info') => {
+        const id = `t${_tid++}`;
+        setToasts((prev) => [...prev.slice(-3), { id, text, tone }]);
+        setTimeout(() => dismissToast(id), 4200);
+    }, [dismissToast]);
+
+    const pushLogs = useCallback((entries) => {
+        const stamped = entries.map((e) => ({ ...e, id: `l${_lid++}`, time: clock() }));
+        setLogs((prev) => [...prev, ...stamped].slice(-120));
+        setEventsAnalyzed((n) => n + entries.length);
+    }, []);
+
+    // Alerts as displayed: analyst triage decisions overlay whatever the
+    // source (sim or backend) reported.
+    const shownAlerts = useMemo(
+        () => alerts.map((a) => {
+            const t = triage[alertKey(a)];
+            return t ? { ...a, status: t } : a;
+        }),
+        [alerts, triage]);
+
+    // Manual containment merges into the SOAR feed (manual first — newest).
+    const allMitigations = useMemo(
+        () => [...manualMitigations, ...mitigations],
+        [manualMitigations, mitigations]);
+
+    const blockedIps = useMemo(() => {
+        const s = new Set();
+        for (const m of allMitigations) {
+            if (m.action === 'BLOCK_IP' && m.target) s.add(m.target);
+        }
+        return s;
+    }, [allMitigations]);
+
+    // Alert-feed filter (severity / status / free text).
+    const filteredAlerts = useMemo(() => {
+        const q = filter.q.trim().toLowerCase();
+        return shownAlerts.filter((a) => {
+            if (filter.sev !== 'all' && (a.severity || '').toLowerCase() !== filter.sev) return false;
+            if (filter.status !== 'all' && normStatus(a.status) !== filter.status) return false;
+            if (q) {
+                const hay = [
+                    a.source_ip, a.rule_name, a.description,
+                    a.mitre?.technique, a.mitre?.name, a.mitre?.tactic,
+                ].filter(Boolean).join(' ').toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+            return true;
+        });
+    }, [shownAlerts, filter]);
 
     // Demo: incidents are correlated client-side from the alerts on the board.
     // Live: they come from the backend's correlation engine.
@@ -49,10 +115,35 @@ export default function Dashboard() {
         () => (DEMO_MODE ? correlateAlerts(alerts) : []), [alerts]);
     const incidents = DEMO_MODE ? demoIncidents : liveIncidents;
 
-    const pushLogs = useCallback((entries) => {
-        const stamped = entries.map((e) => ({ ...e, id: `l${_lid++}`, time: clock() }));
-        setLogs((prev) => [...prev, ...stamped].slice(-120));
-        setEventsAnalyzed((n) => n + entries.length);
+    // --- Analyst actions ----------------------------------------------------
+
+    const handleTriage = useCallback((alert, status) => {
+        setTriage((prev) => ({ ...prev, [alertKey(alert)]: status }));
+        const meta = STATUS_META[status];
+        addToast(
+            `${alert.rule_name} from ${alert.source_ip} → ${meta.label}`,
+            status === 'resolved' ? 'success' : 'info');
+    }, [addToast]);
+
+    const handleBlock = useCallback((alert) => {
+        const ip = alert.source_ip;
+        if (!ip || blockedIps.has(ip)) return;
+        setManualMitigations((prev) => [{
+            _id: `manual-${Date.now()}-${prev.length}`,
+            timestamp: new Date().toISOString(),
+            playbook: 'manual_containment',
+            action: 'BLOCK_IP',
+            target: ip,
+            reason: `Manually blocked by analyst from alert '${alert.rule_name}'.`,
+            status: 'applied',
+            isNew: true,
+        }, ...prev].slice(0, 50));
+        pushLogs([{ raw: `soar: analyst issued BLOCK_IP for ${ip} (manual containment)`, kind: 'attack' }]);
+        addToast(`Firewall rule pushed — ${ip} blocked`, 'block');
+    }, [blockedIps, pushLogs, addToast]);
+
+    const updateFilter = useCallback((patch) => {
+        setFilter((prev) => ({ ...prev, ...patch }));
     }, []);
 
     // --- Demo mode: interactive simulation ---------------------------------
@@ -79,10 +170,44 @@ export default function Dashboard() {
     const resetBoard = useCallback(() => {
         setAlerts([]);
         setMitigations([]);
+        setManualMitigations([]);
+        setTriage({});
         setLogs([]);
         setTimeline(makeTimeline());
+        setFilter({ sev: 'all', status: 'all', q: '' });
         bucketHits.current = 0;
     }, []);
+
+    // Keyboard shortcuts: 1–0 launch attacks, U unleash, R reset, / search.
+    useEffect(() => {
+        const onKey = (e) => {
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            const tag = e.target?.tagName;
+            const typing = tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable;
+
+            if (e.key === '/' && !typing) {
+                e.preventDefault();
+                document.getElementById(SEARCH_INPUT_ID)?.focus();
+                return;
+            }
+            if (e.key === 'Escape' && tag === 'INPUT') {
+                e.target.blur();
+                return;
+            }
+            if (!DEMO_MODE || typing) return;
+
+            if (/^[0-9]$/.test(e.key)) {
+                const idx = e.key === '0' ? 9 : Number(e.key) - 1;
+                if (ATTACK_KEYS[idx]) launchAttack(ATTACK_KEYS[idx]);
+            } else if (e.key === 'u' || e.key === 'U') {
+                unleashAll();
+            } else if (e.key === 'r' || e.key === 'R') {
+                resetBoard();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [launchAttack, unleashAll, resetBoard]);
 
     // Seed demo data + run ambient traffic and the rolling timeline.
     useEffect(() => {
@@ -137,7 +262,8 @@ export default function Dashboard() {
         return () => clearInterval(interval);
     }, []);
 
-    const criticalCount = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').length;
+    const openAlerts = shownAlerts.filter((a) => isOpen(normStatus(a.status)));
+    const criticalCount = openAlerts.filter((a) => a.severity === 'critical' || a.severity === 'high').length;
 
     return (
         <div className="p-6 md:p-8 max-w-7xl mx-auto">
@@ -199,7 +325,7 @@ export default function Dashboard() {
             {/* Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <StatCard title="Total Events Analyzed" value={eventsAnalyzed.toLocaleString()} type="info" />
-                <StatCard title="Active Alerts" value={alerts.length} type="warning" />
+                <StatCard title="Open Alerts" value={openAlerts.length} type="warning" />
                 <StatCard title="Critical / High Threats" value={criticalCount} type={criticalCount > 0 ? 'critical' : ''} />
             </div>
 
@@ -236,7 +362,7 @@ export default function Dashboard() {
 
             {/* SOAR playbooks — trigger → automated action, with live exec counts */}
             <div className="mb-8">
-                <PlaybooksPanel mitigations={mitigations} />
+                <PlaybooksPanel mitigations={allMitigations} />
             </div>
 
             {/* Live log console (demo only) */}
@@ -249,16 +375,16 @@ export default function Dashboard() {
                         <Cpu className="h-5 w-5 text-emerald-400" />
                         Active SOAR Mitigations
                     </h2>
-                    {mitigations.length > 0 && (
+                    {allMitigations.length > 0 && (
                         <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded font-bold border border-emerald-500/30">
-                            {mitigations.length} ACTION(S) APPLIED
+                            {allMitigations.length} ACTION(S) APPLIED
                         </span>
                     )}
                 </div>
-                <MitigationTable mitigations={mitigations} />
+                <MitigationTable mitigations={allMitigations} />
             </div>
 
-            {/* Threat Alert Feed */}
+            {/* Threat Alert Feed — searchable, filterable, triageable */}
             <div>
                 <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-lg font-bold text-slate-200 flex items-center gap-2">
@@ -267,8 +393,22 @@ export default function Dashboard() {
                     </h2>
                     {loading && <span className="text-sm text-slate-500 animate-pulse">Syncing...</span>}
                 </div>
-                <AlertTable alerts={alerts} />
+                <AlertToolbar
+                    filter={filter}
+                    onChange={updateFilter}
+                    shown={filteredAlerts.length}
+                    total={shownAlerts.length}
+                    searchId={SEARCH_INPUT_ID}
+                />
+                <AlertTable
+                    alerts={filteredAlerts}
+                    onTriage={handleTriage}
+                    onBlock={handleBlock}
+                    blockedIps={blockedIps}
+                />
             </div>
+
+            <Toasts toasts={toasts} onDismiss={dismissToast} />
         </div>
     );
 }
