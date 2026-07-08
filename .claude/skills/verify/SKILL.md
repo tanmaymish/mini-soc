@@ -33,7 +33,8 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 Flows worth driving after a dashboard change:
 - Click an attack tile (e.g. "SQL Injection") → alert appears in the
   Threat Alert Feed, Open Alerts stat increments.
-- Keyboard: `1`–`0` launch attacks, `U` unleash all, `R` reset board,
+- Keyboard: `1`–`0` launch attacks, `L` toggles Live Fire (continuous
+  randomized attacks every 3–8s), `U` unleash all, `R` reset board,
   `/` focuses the alert search.
 - Expand an alert row ("View Evidence") → Analyst actions bar:
   Acknowledge / Resolve / False positive / Block IP.

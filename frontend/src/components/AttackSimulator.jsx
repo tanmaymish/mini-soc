@@ -27,7 +27,7 @@ function Kbd({ children }) {
     );
 }
 
-export default function AttackSimulator({ onAttack, onUnleash, onReset, running }) {
+export default function AttackSimulator({ onAttack, onUnleash, onReset, running, liveFire, onToggleLiveFire }) {
     return (
         <div className="bg-slate-800/60 rounded-xl border border-slate-700 p-5 mb-8 shadow-lg">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -41,6 +41,24 @@ export default function AttackSimulator({ onAttack, onUnleash, onReset, running 
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={onToggleLiveFire}
+                        title="Continuous randomized attacks, like a production SOC feed (L)"
+                        className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-lg transition-colors shadow border ${
+                            liveFire
+                                ? 'bg-amber-500/20 border-amber-500/60 text-amber-300'
+                                : 'bg-slate-700 border-transparent hover:bg-slate-600 text-slate-200'
+                        }`}
+                    >
+                        <span className="relative flex h-2.5 w-2.5">
+                            {liveFire && (
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                            )}
+                            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${liveFire ? 'bg-amber-400' : 'bg-slate-500'}`} />
+                        </span>
+                        {liveFire ? 'Live Fire: ON' : 'Live Fire'}
+                        <Kbd>L</Kbd>
+                    </button>
                     <button
                         onClick={onUnleash}
                         disabled={running}
@@ -88,8 +106,8 @@ export default function AttackSimulator({ onAttack, onUnleash, onReset, running 
 
             <p className="mt-3 text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
                 <Keyboard className="h-3.5 w-3.5" />
-                Shortcuts: <Kbd>1</Kbd>–<Kbd>0</Kbd> launch an attack · <Kbd>U</Kbd> unleash all ·
-                <Kbd>R</Kbd> reset board · <Kbd>/</Kbd> search alerts
+                Shortcuts: <Kbd>1</Kbd>–<Kbd>0</Kbd> launch an attack · <Kbd>L</Kbd> live fire ·
+                <Kbd>U</Kbd> unleash all · <Kbd>R</Kbd> reset board · <Kbd>/</Kbd> search alerts
             </p>
         </div>
     );

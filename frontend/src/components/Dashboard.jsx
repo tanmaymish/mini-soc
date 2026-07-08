@@ -16,8 +16,11 @@ import RiskActors from './RiskActors';
 import PlaybooksPanel from './PlaybooksPanel';
 import Toasts from './Toasts';
 import { getDemoAlerts, getDemoMitigations } from '../demoData';
-import { ATTACK_KEYS, buildAttack, benignLog, correlateAlerts } from '../simEngine';
-import { STATUS_META, normStatus, isOpen, alertKey } from '../alertStatus';
+import { ATTACK_KEYS, buildAttack, benignLog, correlateAlerts, randomAttackKey } from '../simEngine';
+import {
+    STATUS_NEW, STATUS_ACK, STATUS_META, CLOSED_STATUSES,
+    normStatus, isOpen, alertKey,
+} from '../alertStatus';
 
 // Demo mode: interactive, self-contained build (e.g. GitHub Pages).
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
@@ -35,6 +38,16 @@ function makeTimeline() {
     return Array.from({ length: TIMELINE_BUCKETS }, (_, i) => ({ t: '', count: 0, _k: i }));
 }
 
+// Compact duration for analyst KPIs: 42s, 3.5m, 1.2h.
+function fmtDur(ms) {
+    if (ms == null) return '—';
+    const s = ms / 1000;
+    if (s < 90) return `${Math.round(s)}s`;
+    const m = s / 60;
+    if (m < 90) return `${m < 10 ? m.toFixed(1) : Math.round(m)}m`;
+    return `${(m / 60).toFixed(1)}h`;
+}
+
 export default function Dashboard() {
     const [alerts, setAlerts] = useState([]);
     const [mitigations, setMitigations] = useState([]);
@@ -47,10 +60,13 @@ export default function Dashboard() {
     const [liveIncidents, setLiveIncidents] = useState([]);
 
     // Analyst interactivity: triage decisions, manual containment, feedback.
-    const [triage, setTriage] = useState({});          // alertKey → status
+    // triage: alertKey → { status, openedAt, ackAt?, closedAt? } — the
+    // timestamps drive the MTTA / MTTR analyst-performance metrics.
+    const [triage, setTriage] = useState({});
     const [manualMitigations, setManualMitigations] = useState([]);
     const [filter, setFilter] = useState({ sev: 'all', status: 'all', q: '' });
     const [toasts, setToasts] = useState([]);
+    const [liveFire, setLiveFire] = useState(false);
 
     const bucketHits = useRef(0);
 
@@ -75,7 +91,7 @@ export default function Dashboard() {
     const shownAlerts = useMemo(
         () => alerts.map((a) => {
             const t = triage[alertKey(a)];
-            return t ? { ...a, status: t } : a;
+            return t ? { ...a, status: t.status } : a;
         }),
         [alerts, triage]);
 
@@ -118,12 +134,38 @@ export default function Dashboard() {
     // --- Analyst actions ----------------------------------------------------
 
     const handleTriage = useCallback((alert, status) => {
-        setTriage((prev) => ({ ...prev, [alertKey(alert)]: status }));
+        const now = Date.now();
+        setTriage((prev) => {
+            const key = alertKey(alert);
+            const cur = prev[key] || {};
+            const entry = {
+                ...cur,
+                status,
+                openedAt: cur.openedAt ?? new Date(alert.timestamp || now).getTime(),
+            };
+            if (status === STATUS_ACK && !entry.ackAt) entry.ackAt = now;
+            if (CLOSED_STATUSES.has(status)) entry.closedAt = now;
+            if (status === STATUS_NEW) { delete entry.ackAt; delete entry.closedAt; }
+            return { ...prev, [key]: entry };
+        });
         const meta = STATUS_META[status];
         addToast(
             `${alert.rule_name} from ${alert.source_ip} → ${meta.label}`,
             status === 'resolved' ? 'success' : 'info');
     }, [addToast]);
+
+    // Analyst performance: mean time to acknowledge / resolve, cases closed.
+    const perf = useMemo(() => {
+        const entries = Object.values(triage);
+        const mean = (arr, at) => arr.reduce((s, e) => s + Math.max(0, e[at] - e.openedAt), 0) / arr.length;
+        const acked = entries.filter((e) => e.ackAt);
+        const closed = entries.filter((e) => e.closedAt && CLOSED_STATUSES.has(e.status));
+        return {
+            closed: closed.length,
+            mtta: acked.length ? mean(acked, 'ackAt') : null,
+            mttr: closed.length ? mean(closed, 'closedAt') : null,
+        };
+    }, [triage]);
 
     const handleBlock = useCallback((alert) => {
         const ip = alert.source_ip;
@@ -175,8 +217,31 @@ export default function Dashboard() {
         setLogs([]);
         setTimeline(makeTimeline());
         setFilter({ sev: 'all', status: 'all', q: '' });
+        setLiveFire(false);
         bucketHits.current = 0;
     }, []);
+
+    const toggleLiveFire = useCallback(() => {
+        setLiveFire((on) => {
+            addToast(on ? 'Live Fire disengaged — attack stream stopped'
+                        : 'Live Fire engaged — incoming attack stream', 'attack');
+            return !on;
+        });
+    }, [addToast]);
+
+    // Live Fire: randomized attacks arrive on their own, like a real feed.
+    useEffect(() => {
+        if (!DEMO_MODE || !liveFire) return;
+        let t;
+        const schedule = () => {
+            t = setTimeout(() => {
+                launchAttack(randomAttackKey());
+                schedule();
+            }, 3000 + Math.random() * 5000);
+        };
+        schedule();
+        return () => clearTimeout(t);
+    }, [liveFire, launchAttack]);
 
     // Keyboard shortcuts: 1–0 launch attacks, U unleash, R reset, / search.
     useEffect(() => {
@@ -203,11 +268,13 @@ export default function Dashboard() {
                 unleashAll();
             } else if (e.key === 'r' || e.key === 'R') {
                 resetBoard();
+            } else if (e.key === 'l' || e.key === 'L') {
+                toggleLiveFire();
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [launchAttack, unleashAll, resetBoard]);
+    }, [launchAttack, unleashAll, resetBoard, toggleLiveFire]);
 
     // Seed demo data + run ambient traffic and the rolling timeline.
     useEffect(() => {
@@ -319,14 +386,21 @@ export default function Dashboard() {
                     onUnleash={unleashAll}
                     onReset={resetBoard}
                     running={running}
+                    liveFire={liveFire}
+                    onToggleLiveFire={toggleLiveFire}
                 />
             )}
 
             {/* Stats Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <StatCard title="Total Events Analyzed" value={eventsAnalyzed.toLocaleString()} type="info" />
                 <StatCard title="Open Alerts" value={openAlerts.length} type="warning" />
                 <StatCard title="Critical / High Threats" value={criticalCount} type={criticalCount > 0 ? 'critical' : ''} />
+                <StatCard
+                    title={perf.closed > 0 ? `Analyst MTTR · ${perf.closed} closed` : 'Analyst MTTR'}
+                    value={fmtDur(perf.mttr)}
+                    sub={perf.mtta != null ? `MTTA ${fmtDur(perf.mtta)}` : null}
+                />
             </div>
 
             {/* Live global attack map — geolocated arcs to the SOC */}
