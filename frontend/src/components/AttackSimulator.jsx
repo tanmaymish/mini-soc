@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     KeyRound, Radar, Database, Code, Globe, UserCog, Cpu, Zap, Trash2,
-    ShieldAlert, Boxes, Fingerprint, Crosshair, Keyboard,
+    ShieldAlert, Boxes, Fingerprint, Crosshair, Keyboard, Gamepad2,
 } from 'lucide-react';
 import { ATTACKS, ATTACK_KEYS } from '../simEngine';
 
@@ -27,7 +27,7 @@ function Kbd({ children }) {
     );
 }
 
-export default function AttackSimulator({ onAttack, onUnleash, onReset, running, liveFire, onToggleLiveFire }) {
+export default function AttackSimulator({ onAttack, onUnleash, onReset, running, liveFire, onToggleLiveFire, defenseActive, onDefense }) {
     return (
         <div className="bg-slate-800/60 rounded-xl border border-slate-700 p-5 mb-8 shadow-lg">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -42,9 +42,20 @@ export default function AttackSimulator({ onAttack, onUnleash, onReset, running,
                 </div>
                 <div className="flex items-center gap-2">
                     <button
+                        onClick={onDefense}
+                        disabled={defenseActive}
+                        title="Play SOC Defense — contain a live attack stream before it breaches (D)"
+                        className="flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-lg transition-colors shadow border border-brand-500/50 bg-gradient-to-r from-brand-500/25 to-violet-500/25 hover:from-brand-500/40 hover:to-violet-500/40 disabled:opacity-50 disabled:cursor-not-allowed text-brand-200"
+                    >
+                        <Gamepad2 className="h-4 w-4" />
+                        SOC Defense
+                        <Kbd>D</Kbd>
+                    </button>
+                    <button
                         onClick={onToggleLiveFire}
+                        disabled={defenseActive}
                         title="Continuous randomized attacks, like a production SOC feed (L)"
-                        className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-lg transition-colors shadow border ${
+                        className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-lg transition-colors shadow border disabled:opacity-50 disabled:cursor-not-allowed ${
                             liveFire
                                 ? 'bg-amber-500/20 border-amber-500/60 text-amber-300'
                                 : 'bg-slate-700 border-transparent hover:bg-slate-600 text-slate-200'
@@ -61,7 +72,7 @@ export default function AttackSimulator({ onAttack, onUnleash, onReset, running,
                     </button>
                     <button
                         onClick={onUnleash}
-                        disabled={running}
+                        disabled={running || defenseActive}
                         className="flex items-center gap-2 bg-red-500/90 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors shadow"
                     >
                         <Zap className="h-4 w-4" />
@@ -70,8 +81,9 @@ export default function AttackSimulator({ onAttack, onUnleash, onReset, running,
                     </button>
                     <button
                         onClick={onReset}
+                        disabled={defenseActive}
                         title="Clear the board (R)"
-                        className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-semibold px-3 py-2 rounded-lg transition-colors"
+                        className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-200 text-sm font-semibold px-3 py-2 rounded-lg transition-colors"
                     >
                         <Trash2 className="h-4 w-4" />
                         <Kbd>R</Kbd>
@@ -79,7 +91,7 @@ export default function AttackSimulator({ onAttack, onUnleash, onReset, running,
                 </div>
             </div>
 
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+            <div className={`grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 ${defenseActive ? 'opacity-40 pointer-events-none' : ''}`}>
                 {ATTACK_KEYS.map((key, i) => {
                     const a = ATTACKS[key];
                     const Icon = ICONS[a.icon] || Zap;
@@ -106,8 +118,8 @@ export default function AttackSimulator({ onAttack, onUnleash, onReset, running,
 
             <p className="mt-3 text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
                 <Keyboard className="h-3.5 w-3.5" />
-                Shortcuts: <Kbd>1</Kbd>–<Kbd>0</Kbd> launch an attack · <Kbd>L</Kbd> live fire ·
-                <Kbd>U</Kbd> unleash all · <Kbd>R</Kbd> reset board · <Kbd>/</Kbd> search alerts
+                Shortcuts: <Kbd>1</Kbd>–<Kbd>0</Kbd> launch an attack · <Kbd>D</Kbd> SOC Defense ·
+                <Kbd>L</Kbd> live fire · <Kbd>U</Kbd> unleash all · <Kbd>R</Kbd> reset · <Kbd>/</Kbd> search
             </p>
         </div>
     );

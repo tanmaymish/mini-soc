@@ -35,7 +35,14 @@ Flows worth driving after a dashboard change:
   Threat Alert Feed, Open Alerts stat increments.
 - Keyboard: `1`–`0` launch attacks, `L` toggles Live Fire (continuous
   randomized attacks every 3–8s), `U` unleash all, `R` reset board,
-  `/` focuses the alert search.
+  `/` focuses the alert search, `D` starts/ends SOC Defense.
+- SOC Defense (game): `D` or the button starts it. A sticky HUD shows
+  integrity / score / combo / wave and a threat queue with per-threat
+  "Contain" buttons and breach countdowns. Containing (block or close)
+  scores; letting a threat's timer expire damages integrity; at 0 the
+  "SOC BREACHED" modal shows the final score + analyst rank. Manual
+  attack keys/buttons are muted during a shift. Reconciler/scoring runs
+  on a 250ms tick, so allow a beat after clicking before asserting.
 - Expand an alert row ("View Evidence") → Analyst actions bar:
   Acknowledge / Resolve / False positive / Block IP.
 - Triage buttons update the Status badge, fire a toast (`.toast-in`),

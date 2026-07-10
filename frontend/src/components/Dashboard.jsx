@@ -15,12 +15,16 @@ import ApiMapPanel from './ApiMapPanel';
 import RiskActors from './RiskActors';
 import PlaybooksPanel from './PlaybooksPanel';
 import Toasts from './Toasts';
+import DefenseHUD from './DefenseHUD';
 import { getDemoAlerts, getDemoMitigations } from '../demoData';
 import { ATTACK_KEYS, buildAttack, benignLog, correlateAlerts, randomAttackKey } from '../simEngine';
 import {
-    STATUS_NEW, STATUS_ACK, STATUS_META, CLOSED_STATUSES,
+    STATUS_NEW, STATUS_ACK, STATUS_RESOLVED, STATUS_META, CLOSED_STATUSES,
     normStatus, isOpen, alertKey,
 } from '../alertStatus';
+import {
+    DEFENSE_DAMAGE, CONTAINS_PER_WAVE, scoreFor, breachWindow, spawnDelay, initialDefense,
+} from '../defenseGame';
 
 // Demo mode: interactive, self-contained build (e.g. GitHub Pages).
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
@@ -68,6 +72,12 @@ export default function Dashboard() {
     const [toasts, setToasts] = useState([]);
     const [liveFire, setLiveFire] = useState(false);
 
+    // SOC Defense (game mode): live threats each carry a breach countdown.
+    const [defense, setDefense] = useState(initialDefense);
+    const [threats, setThreats] = useState({});   // alertKey → { key, at, start, sev, ip, rule }
+    const [gameNow, setGameNow] = useState(0);
+    const [breachFlash, setBreachFlash] = useState(false);
+
     const bucketHits = useRef(0);
 
     const dismissToast = useCallback((id) => {
@@ -107,6 +117,23 @@ export default function Dashboard() {
         }
         return s;
     }, [allMitigations]);
+
+    // Alerts the analyst has closed — used by the defense reconciler.
+    const closedKeys = useMemo(() => {
+        const s = new Set();
+        for (const [k, t] of Object.entries(triage)) {
+            if (CLOSED_STATUSES.has(t.status)) s.add(k);
+        }
+        return s;
+    }, [triage]);
+
+    // Refs so the game's timers read the latest state without re-subscribing.
+    const threatsRef = useRef(threats); threatsRef.current = threats;
+    const closedKeysRef = useRef(closedKeys); closedKeysRef.current = closedKeys;
+    const blockedIpsRef = useRef(blockedIps); blockedIpsRef.current = blockedIps;
+    const alertsRef = useRef(alerts); alertsRef.current = alerts;
+    const waveRef = useRef(1); waveRef.current = defense.wave;
+    const defenseActiveRef = useRef(false); defenseActiveRef.current = defense.active;
 
     // Alert-feed filter (severity / status / free text).
     const filteredAlerts = useMemo(() => {
@@ -243,6 +270,116 @@ export default function Dashboard() {
         return () => clearTimeout(t);
     }, [liveFire, launchAttack]);
 
+    // --- SOC Defense (game mode) -------------------------------------------
+
+    // Spawn a threat: like a normal attack, but with a breach deadline and
+    // NO auto-mitigation — containing it is now the analyst's job.
+    const spawnDefenseThreat = useCallback(() => {
+        const { alerts: a, logs: l } = buildAttack(randomAttackKey());
+        setAlerts((prev) => [...a, ...prev].slice(0, 50));
+        pushLogs(l);
+        bucketHits.current += a.length;
+        const now = Date.now();
+        const win = breachWindow(waveRef.current);
+        setThreats((prev) => {
+            const next = { ...prev };
+            for (const al of a) {
+                const key = alertKey(al);
+                next[key] = { key, at: now + win, start: now, sev: al.severity, ip: al.source_ip, rule: al.rule_name };
+            }
+            return next;
+        });
+    }, [pushLogs]);
+
+    const startDefense = useCallback(() => {
+        setAlerts([]);
+        setMitigations([]);
+        setManualMitigations([]);
+        setTriage({});
+        setLogs([]);
+        setThreats({});
+        setFilter({ sev: 'all', status: 'all', q: '' });
+        setLiveFire(false);
+        setDefense({ ...initialDefense(), active: true });
+        addToast('SOC Defense engaged — contain every threat before it breaches!', 'attack');
+    }, [addToast]);
+
+    const endDefense = useCallback(() => {
+        setThreats({});
+        setDefense((prev) => ({ ...prev, active: false, over: true }));
+    }, []);
+
+    const dismissDefense = useCallback(() => {
+        setThreats({});
+        setDefense(initialDefense());
+    }, []);
+
+    // One-click containment from the HUD queue: block the source, close the alert.
+    const defendThreat = useCallback((key) => {
+        const alert = alertsRef.current.find((a) => alertKey(a) === key);
+        if (!alert) return;
+        handleBlock(alert);
+        handleTriage(alert, STATUS_RESOLVED);
+    }, [handleBlock, handleTriage]);
+
+    // Game tick: the single owner of scoring. Every 250ms it reconciles the
+    // pending threats — contained (closed or IP blocked) → score; expired →
+    // breach + integrity damage; then advances waves / ends the game.
+    useEffect(() => {
+        if (!defense.active) return;
+        const id = setInterval(() => {
+            const now = Date.now();
+            setGameNow(now);
+            const cur = threatsRef.current;
+            const contained = [];
+            const breached = [];
+            for (const [k, t] of Object.entries(cur)) {
+                if (closedKeysRef.current.has(k) || blockedIpsRef.current.has(t.ip)) contained.push(t);
+                else if (t.at <= now) breached.push(t);
+            }
+            if (!contained.length && !breached.length) return;
+
+            setThreats((prev) => {
+                const next = { ...prev };
+                for (const t of [...contained, ...breached]) delete next[t.key];
+                return next;
+            });
+
+            const dmg = breached.reduce((s, t) => s + (DEFENSE_DAMAGE[t.sev] || 8), 0);
+            setDefense((prev) => {
+                if (!prev.active) return prev;
+                let { combo, score, contained: cc, breached: bb, integrity } = prev;
+                for (const t of contained) { combo += 1; score += scoreFor(t.sev, combo); cc += 1; }
+                if (breached.length) { combo = 0; bb += breached.length; integrity = Math.max(0, integrity - dmg); }
+                const over = integrity <= 0;
+                return {
+                    ...prev, combo, score, contained: cc, breached: bb, integrity,
+                    wave: 1 + Math.floor(cc / CONTAINS_PER_WAVE),
+                    over, active: over ? false : prev.active,
+                };
+            });
+
+            if (breached.length) {
+                setBreachFlash(true);
+                setTimeout(() => setBreachFlash(false), 350);
+                addToast(`⚠ ${breached.length} threat(s) breached the perimeter — −${dmg}% integrity`, 'block');
+            }
+        }, 250);
+        return () => clearInterval(id);
+    }, [defense.active, addToast]);
+
+    // Spawn loop — cadence tightens as waves escalate (reads waveRef live).
+    useEffect(() => {
+        if (!DEMO_MODE || !defense.active) return;
+        let t;
+        const schedule = () => {
+            t = setTimeout(() => { spawnDefenseThreat(); schedule(); }, spawnDelay(waveRef.current));
+        };
+        spawnDefenseThreat();
+        schedule();
+        return () => clearTimeout(t);
+    }, [defense.active, spawnDefenseThreat]);
+
     // Keyboard shortcuts: 1–0 launch attacks, U unleash, R reset, / search.
     useEffect(() => {
         const onKey = (e) => {
@@ -261,20 +398,31 @@ export default function Dashboard() {
             }
             if (!DEMO_MODE || typing) return;
 
+            const k = e.key.toLowerCase();
+            if (k === 'd') {
+                defenseActiveRef.current ? endDefense() : startDefense();
+                return;
+            }
+            // While a defense shift is live, mute the manual-attack keys so the
+            // analyst can't self-inflict — only D (end) and R (abort) apply.
+            if (defenseActiveRef.current) {
+                if (k === 'r') endDefense();
+                return;
+            }
             if (/^[0-9]$/.test(e.key)) {
                 const idx = e.key === '0' ? 9 : Number(e.key) - 1;
                 if (ATTACK_KEYS[idx]) launchAttack(ATTACK_KEYS[idx]);
-            } else if (e.key === 'u' || e.key === 'U') {
+            } else if (k === 'u') {
                 unleashAll();
-            } else if (e.key === 'r' || e.key === 'R') {
+            } else if (k === 'r') {
                 resetBoard();
-            } else if (e.key === 'l' || e.key === 'L') {
+            } else if (k === 'l') {
                 toggleLiveFire();
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [launchAttack, unleashAll, resetBoard, toggleLiveFire]);
+    }, [launchAttack, unleashAll, resetBoard, toggleLiveFire, startDefense, endDefense]);
 
     // Seed demo data + run ambient traffic and the rolling timeline.
     useEffect(() => {
@@ -334,6 +482,21 @@ export default function Dashboard() {
 
     return (
         <div className="p-6 md:p-8 max-w-7xl mx-auto">
+            {breachFlash && <div className="breach-flash" />}
+
+            {/* SOC Defense game HUD + game-over modal (demo only) */}
+            {DEMO_MODE && (
+                <DefenseHUD
+                    defense={defense}
+                    threats={threats}
+                    now={gameNow}
+                    onContain={defendThreat}
+                    onEnd={endDefense}
+                    onRestart={startDefense}
+                    onClose={dismissDefense}
+                />
+            )}
+
             {/* Header */}
             <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
                 <div className="flex items-center gap-3">
@@ -388,6 +551,8 @@ export default function Dashboard() {
                     running={running}
                     liveFire={liveFire}
                     onToggleLiveFire={toggleLiveFire}
+                    defenseActive={defense.active}
+                    onDefense={startDefense}
                 />
             )}
 
@@ -479,6 +644,8 @@ export default function Dashboard() {
                     onTriage={handleTriage}
                     onBlock={handleBlock}
                     blockedIps={blockedIps}
+                    deadlines={threats}
+                    now={gameNow}
                 />
             </div>
 

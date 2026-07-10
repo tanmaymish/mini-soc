@@ -35,7 +35,27 @@ function ActionButton({ onClick, disabled, active, tone, icon, children }) {
     );
 }
 
-export default function AlertTable({ alerts, onTriage, onBlock, blockedIps }) {
+// Breach countdown shown on a live threat during SOC Defense.
+function BreachBar({ threat, now }) {
+    const remaining = Math.max(0, threat.at - now);
+    const total = threat.at - threat.start || 1;
+    const pct = Math.max(0, Math.min(100, (remaining / total) * 100));
+    const secs = Math.ceil(remaining / 1000);
+    const bar = pct > 50 ? 'bg-emerald-500' : pct > 25 ? 'bg-amber-500' : 'bg-red-500';
+    return (
+        <div className="mt-1.5 w-24">
+            <div className="flex justify-between text-[10px] mb-0.5">
+                <span className="text-slate-500 uppercase tracking-wide">breach</span>
+                <span className={clsx('font-mono', pct <= 25 ? 'text-red-400 font-bold' : 'text-slate-400')}>{secs}s</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
+                <div className={clsx('h-full transition-[width] duration-200', bar)} style={{ width: `${pct}%` }} />
+            </div>
+        </div>
+    );
+}
+
+export default function AlertTable({ alerts, onTriage, onBlock, blockedIps, deadlines, now }) {
     const [expandedId, setExpandedId] = useState(null);
     const blocked = blockedIps || new Set();
 
@@ -80,6 +100,7 @@ export default function AlertTable({ alerts, onTriage, onBlock, blockedIps }) {
                         const meta = STATUS_META[status];
                         const closed = !isOpen(status);
                         const ipBlocked = blocked.has(alert.source_ip);
+                        const threat = deadlines?.[id];
                         return (
                             <React.Fragment key={id}>
                                 <tr
@@ -125,6 +146,7 @@ export default function AlertTable({ alerts, onTriage, onBlock, blockedIps }) {
                                         <span className={clsx('px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap', meta.badge)}>
                                             {meta.label}
                                         </span>
+                                        {threat && <BreachBar threat={threat} now={now} />}
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <button className="text-brand-500 hover:text-brand-400 text-xs font-semibold tracking-wide uppercase transition-colors">
