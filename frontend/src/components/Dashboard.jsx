@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { Activity, ShieldCheck, Radar, Cpu, FlaskConical, GitBranch } from 'lucide-react';
+import {
+    Activity, ShieldCheck, Cpu, GitBranch, LayoutDashboard,
+    Bell, ScanLine, Workflow, Gamepad2, Globe,
+} from 'lucide-react';
 import StatCard from './StatCard';
 import AlertTable from './AlertTable';
 import AlertToolbar from './AlertToolbar';
@@ -16,6 +19,9 @@ import RiskActors from './RiskActors';
 import PlaybooksPanel from './PlaybooksPanel';
 import Toasts from './Toasts';
 import DefenseHUD from './DefenseHUD';
+import Sidebar from './Sidebar';
+import TopBar from './TopBar';
+import SectionHeader from './SectionHeader';
 import { getDemoAlerts, getDemoMitigations } from '../demoData';
 import { ATTACK_KEYS, buildAttack, benignLog, correlateAlerts, randomAttackKey } from '../simEngine';
 import {
@@ -71,6 +77,7 @@ export default function Dashboard() {
     const [filter, setFilter] = useState({ sev: 'all', status: 'all', q: '' });
     const [toasts, setToasts] = useState([]);
     const [liveFire, setLiveFire] = useState(false);
+    const [view, setView] = useState('overview');   // active console section
 
     // SOC Defense (game mode): live threats each carry a breach countdown.
     const [defense, setDefense] = useState(initialDefense);
@@ -480,173 +487,189 @@ export default function Dashboard() {
     const openAlerts = shownAlerts.filter((a) => isOpen(normStatus(a.status)));
     const criticalCount = openAlerts.filter((a) => a.severity === 'critical' || a.severity === 'high').length;
 
+    // Global search jumps to the alert queue and filters it.
+    const searchAlerts = useCallback((q) => {
+        setFilter((prev) => ({ ...prev, q }));
+        setView((v) => (q && v !== 'alerts' ? 'alerts' : v));
+    }, []);
+
+    const NAV = [
+        { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+        {
+            key: 'alerts', label: 'Alerts', icon: Bell, badge: openAlerts.length,
+            badgeTone: criticalCount > 0 ? 'bg-red-500/20 text-red-300' : 'bg-slate-700 text-slate-300',
+        },
+        {
+            key: 'incidents', label: 'Incidents', icon: GitBranch, badge: incidents.length,
+            badgeTone: incidents.length ? 'bg-red-500/20 text-red-300' : 'bg-slate-700 text-slate-300',
+        },
+        { key: 'detections', label: 'Detections', icon: ScanLine },
+        {
+            key: 'automation', label: 'Automation', icon: Workflow, badge: allMitigations.length,
+            badgeTone: 'bg-emerald-500/20 text-emerald-300',
+        },
+    ];
+    if (DEMO_MODE) NAV.push({ key: 'simulation', label: 'Simulation', icon: Gamepad2 });
+
+    const VIEW_META = {
+        overview: { title: 'Overview', subtitle: 'Real-time security posture across the monitored estate' },
+        alerts: { title: 'Alert Queue', subtitle: 'Triage, investigate and contain detections' },
+        incidents: { title: 'Incidents', subtitle: 'Correlated multi-stage attacks stitched into kill-chains' },
+        detections: { title: 'Detections', subtitle: 'Rule engine and API attack surface' },
+        automation: { title: 'Automation', subtitle: 'SOAR playbooks and containment actions' },
+        simulation: { title: 'Simulation & Training', subtitle: 'Generate telemetry and run defense drills' },
+    };
+    const meta = VIEW_META[view] || VIEW_META.overview;
+
     return (
-        <div className="p-6 md:p-8 max-w-7xl mx-auto">
+        <div className="flex h-screen overflow-hidden">
             {breachFlash && <div className="breach-flash" />}
 
-            {/* SOC Defense game HUD + game-over modal (demo only) */}
-            {DEMO_MODE && (
-                <DefenseHUD
-                    defense={defense}
-                    threats={threats}
-                    now={gameNow}
-                    onContain={defendThreat}
-                    onEnd={endDefense}
-                    onRestart={startDefense}
-                    onClose={dismissDefense}
-                />
-            )}
+            <Sidebar items={NAV} active={view} onSelect={setView} demoMode={DEMO_MODE} error={error} />
 
-            {/* Header */}
-            <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
-                <div className="flex items-center gap-3">
-                    <div className="bg-brand-500/20 p-2 rounded-lg border border-brand-500/30">
-                        <Radar className="h-8 w-8 text-brand-500" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-slate-100">Mini SOC Console</h1>
-                        <p className="text-slate-400 text-sm">AI-Powered Threat Detection &amp; SOAR Defense</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-full border border-slate-700 shadow-sm">
-                    {DEMO_MODE ? (
-                        <>
-                            <FlaskConical className="h-3.5 w-3.5 text-amber-400" />
-                            <span className="text-sm font-medium text-amber-300">Interactive Demo</span>
-                        </>
-                    ) : (
-                        <>
-                            <span className="relative flex h-3 w-3">
-                                {error ? (
-                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
-                                ) : (
-                                    <>
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
-                                    </>
-                                )}
-                            </span>
-                            <span className="text-sm font-medium text-slate-300">
-                                {error ? 'SOAR Engine Offline' : 'SOAR Active (Polling)'}
-                            </span>
-                        </>
-                    )}
-                </div>
-            </div>
-
-            {error && !DEMO_MODE && (
-                <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-lg mb-8 shadow-sm flex items-center gap-3">
-                    <Activity className="h-5 w-5" />
-                    {error} Ensure Flask is running on port 5000.
-                </div>
-            )}
-
-            {/* Interactive attack simulator (demo only) */}
-            {DEMO_MODE && (
-                <AttackSimulator
-                    onAttack={launchAttack}
-                    onUnleash={unleashAll}
-                    onReset={resetBoard}
-                    running={running}
-                    liveFire={liveFire}
-                    onToggleLiveFire={toggleLiveFire}
-                    defenseActive={defense.active}
-                    onDefense={startDefense}
-                />
-            )}
-
-            {/* Stats Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <StatCard title="Total Events Analyzed" value={eventsAnalyzed.toLocaleString()} type="info" />
-                <StatCard title="Open Alerts" value={openAlerts.length} type="warning" />
-                <StatCard title="Critical / High Threats" value={criticalCount} type={criticalCount > 0 ? 'critical' : ''} />
-                <StatCard
-                    title={perf.closed > 0 ? `Analyst MTTR · ${perf.closed} closed` : 'Analyst MTTR'}
-                    value={fmtDur(perf.mttr)}
-                    sub={perf.mtta != null ? `MTTA ${fmtDur(perf.mtta)}` : null}
-                />
-            </div>
-
-            {/* Live global attack map — geolocated arcs to the SOC */}
-            <LiveAttackMap alerts={alerts} />
-
-            {/* Detection rule engine — the actual rules + live match counts */}
-            <DetectionRules alerts={alerts} />
-
-            {/* Charts */}
-            <ThreatCharts alerts={alerts} timeline={timeline} />
-
-            {/* API mapping (endpoint→service→risk) + per-actor risk scoring */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-                <ApiMapPanel />
-                <RiskActors alerts={alerts} />
-            </div>
-
-            {/* Correlated Incidents — multi-stage attacks stitched into a kill-chain */}
-            <div className="mb-8">
-                <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                        <GitBranch className="h-5 w-5 text-brand-500" />
-                        Correlated Incidents
-                    </h2>
-                    {incidents.length > 0 && (
-                        <span className="text-xs bg-red-500/20 text-red-300 px-2 py-1 rounded font-bold border border-red-500/30">
-                            {incidents.length} ACTIVE INCIDENT(S)
-                        </span>
-                    )}
-                </div>
-                <IncidentsPanel incidents={incidents} />
-            </div>
-
-            {/* SOAR playbooks — trigger → automated action, with live exec counts */}
-            <div className="mb-8">
-                <PlaybooksPanel mitigations={allMitigations} />
-            </div>
-
-            {/* Live log console (demo only) */}
-            {DEMO_MODE && <LiveConsole lines={logs} />}
-
-            {/* SOAR Mitigations Feed */}
-            <div className="mb-12">
-                <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-emerald-400 flex items-center gap-2">
-                        <Cpu className="h-5 w-5 text-emerald-400" />
-                        Active SOAR Mitigations
-                    </h2>
-                    {allMitigations.length > 0 && (
-                        <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded font-bold border border-emerald-500/30">
-                            {allMitigations.length} ACTION(S) APPLIED
-                        </span>
-                    )}
-                </div>
-                <MitigationTable mitigations={allMitigations} />
-            </div>
-
-            {/* Threat Alert Feed — searchable, filterable, triageable */}
-            <div>
-                <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-slate-200 flex items-center gap-2">
-                        <ShieldCheck className="h-5 w-5 text-slate-400" />
-                        Threat Alert Feed
-                    </h2>
-                    {loading && <span className="text-sm text-slate-500 animate-pulse">Syncing...</span>}
-                </div>
-                <AlertToolbar
-                    filter={filter}
-                    onChange={updateFilter}
-                    shown={filteredAlerts.length}
-                    total={shownAlerts.length}
+            <div className="flex-1 min-w-0 flex flex-col h-screen">
+                <TopBar
+                    title={meta.title}
+                    query={filter.q}
+                    onQuery={searchAlerts}
                     searchId={SEARCH_INPUT_ID}
+                    demoMode={DEMO_MODE}
+                    error={error}
+                    items={NAV}
+                    active={view}
+                    onSelect={setView}
                 />
-                <AlertTable
-                    alerts={filteredAlerts}
-                    onTriage={handleTriage}
-                    onBlock={handleBlock}
-                    blockedIps={blockedIps}
-                    deadlines={threats}
-                    now={gameNow}
-                />
+
+                <main className="flex-1 overflow-y-auto">
+                    <div className="p-5 lg:p-8 max-w-[1600px] w-full mx-auto">
+                        {/* SOC Defense HUD persists across views while a drill runs */}
+                        {DEMO_MODE && (
+                            <DefenseHUD
+                                defense={defense}
+                                threats={threats}
+                                now={gameNow}
+                                onContain={defendThreat}
+                                onEnd={endDefense}
+                                onRestart={startDefense}
+                                onClose={dismissDefense}
+                            />
+                        )}
+
+                        {error && !DEMO_MODE && (
+                            <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-lg mb-6 shadow-sm flex items-center gap-3">
+                                <Activity className="h-5 w-5" />
+                                {error} Ensure Flask is running on port 5000.
+                            </div>
+                        )}
+
+                        {/* ---- Overview ---- */}
+                        {view === 'overview' && (
+                            <>
+                                <SectionHeader icon={LayoutDashboard} title={meta.title} subtitle={meta.subtitle} />
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-6">
+                                    <StatCard title="Total Events Analyzed" value={eventsAnalyzed.toLocaleString()} type="info" />
+                                    <StatCard title="Open Alerts" value={openAlerts.length} type="warning" />
+                                    <StatCard title="Critical / High Threats" value={criticalCount} type={criticalCount > 0 ? 'critical' : ''} />
+                                    <StatCard
+                                        title={perf.closed > 0 ? `Analyst MTTR · ${perf.closed} closed` : 'Analyst MTTR'}
+                                        value={fmtDur(perf.mttr)}
+                                        sub={perf.mtta != null ? `MTTA ${fmtDur(perf.mtta)}` : null}
+                                    />
+                                </div>
+                                <LiveAttackMap alerts={alerts} />
+                                <ThreatCharts alerts={alerts} timeline={timeline} />
+                                <RiskActors alerts={alerts} />
+                            </>
+                        )}
+
+                        {/* ---- Alerts ---- */}
+                        {view === 'alerts' && (
+                            <>
+                                <SectionHeader icon={Bell} title={meta.title} subtitle={meta.subtitle}>
+                                    {loading && <span className="text-sm text-slate-500 animate-pulse">Syncing…</span>}
+                                </SectionHeader>
+                                <AlertToolbar
+                                    filter={filter}
+                                    onChange={updateFilter}
+                                    shown={filteredAlerts.length}
+                                    total={shownAlerts.length}
+                                />
+                                <AlertTable
+                                    alerts={filteredAlerts}
+                                    onTriage={handleTriage}
+                                    onBlock={handleBlock}
+                                    blockedIps={blockedIps}
+                                    deadlines={threats}
+                                    now={gameNow}
+                                />
+                            </>
+                        )}
+
+                        {/* ---- Incidents ---- */}
+                        {view === 'incidents' && (
+                            <>
+                                <SectionHeader icon={GitBranch} title={meta.title} subtitle={meta.subtitle}>
+                                    {incidents.length > 0 && (
+                                        <span className="text-xs bg-red-500/20 text-red-300 px-2 py-1 rounded font-bold border border-red-500/30">
+                                            {incidents.length} ACTIVE
+                                        </span>
+                                    )}
+                                </SectionHeader>
+                                <IncidentsPanel incidents={incidents} />
+                            </>
+                        )}
+
+                        {/* ---- Detections ---- */}
+                        {view === 'detections' && (
+                            <>
+                                <SectionHeader icon={ScanLine} title={meta.title} subtitle={meta.subtitle} />
+                                <DetectionRules alerts={alerts} />
+                                <div className="mt-6">
+                                    <ApiMapPanel />
+                                </div>
+                            </>
+                        )}
+
+                        {/* ---- Automation ---- */}
+                        {view === 'automation' && (
+                            <>
+                                <SectionHeader icon={Workflow} title={meta.title} subtitle={meta.subtitle}>
+                                    {allMitigations.length > 0 && (
+                                        <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded font-bold border border-emerald-500/30">
+                                            {allMitigations.length} APPLIED
+                                        </span>
+                                    )}
+                                </SectionHeader>
+                                <PlaybooksPanel mitigations={allMitigations} />
+                                <div className="mt-8">
+                                    <h2 className="text-base font-bold text-emerald-400 flex items-center gap-2 mb-4">
+                                        <Cpu className="h-5 w-5 text-emerald-400" />
+                                        Active SOAR Mitigations
+                                    </h2>
+                                    <MitigationTable mitigations={allMitigations} />
+                                </div>
+                            </>
+                        )}
+
+                        {/* ---- Simulation & Training (demo only) ---- */}
+                        {view === 'simulation' && DEMO_MODE && (
+                            <>
+                                <SectionHeader icon={Gamepad2} title={meta.title} subtitle={meta.subtitle} />
+                                <AttackSimulator
+                                    onAttack={launchAttack}
+                                    onUnleash={unleashAll}
+                                    onReset={resetBoard}
+                                    running={running}
+                                    liveFire={liveFire}
+                                    onToggleLiveFire={toggleLiveFire}
+                                    defenseActive={defense.active}
+                                    onDefense={startDefense}
+                                />
+                                <LiveConsole lines={logs} />
+                            </>
+                        )}
+                    </div>
+                </main>
             </div>
 
             <Toasts toasts={toasts} onDismiss={dismissToast} />

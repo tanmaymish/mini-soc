@@ -30,7 +30,16 @@ do NOT run `playwright install`:
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 ```
 
+The UI is an app shell: a left `<aside>` nav rail (Overview / Alerts /
+Incidents / Detections / Automation / Simulation) + a top command bar with
+global alert search. Each nav item swaps the `<main>` view (state in
+`Dashboard.jsx`, no router). The top-bar search (`#alert-search`) jumps to
+the Alerts view and filters it. The SOC Defense HUD renders above the view
+switch so it persists while you navigate.
+
 Flows worth driving after a dashboard change:
+- Click each sidebar item → the top-bar breadcrumb title changes and the
+  matching view renders (Overview KPIs+map, Alerts queue, etc.).
 - Click an attack tile (e.g. "SQL Injection") → alert appears in the
   Threat Alert Feed, Open Alerts stat increments.
 - Keyboard: `1`–`0` launch attacks, `L` toggles Live Fire (continuous
