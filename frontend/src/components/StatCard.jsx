@@ -2,7 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { ShieldAlert, AlertTriangle, Info, Shield } from 'lucide-react';
 
-export default function StatCard({ title, value, type }) {
+export default function StatCard({ title, value, type, sub }) {
     const getIcon = () => {
         switch (type) {
             case 'critical': return <ShieldAlert className="h-6 w-6 text-red-500" />;
@@ -25,6 +25,7 @@ export default function StatCard({ title, value, type }) {
                 )}>
                     {value}
                 </p>
+                {sub && <p className="text-xs text-slate-500 font-medium mt-1">{sub}</p>}
             </div>
             <div className="bg-slate-900 p-3 rounded-full">
                 {getIcon()}

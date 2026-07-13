@@ -3,7 +3,7 @@ import Dashboard from './components/Dashboard'
 
 function App() {
   return (
-    <div className="min-h-screen text-slate-50">
+    <div className="text-slate-50">
       <Dashboard />
     </div>
   )

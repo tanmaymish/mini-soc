@@ -309,6 +309,19 @@ export const ATTACKS = {
 
 export const ATTACK_KEYS = Object.keys(ATTACKS);
 
+// Live Fire mode: weighted pick so the stream feels like real telemetry —
+// mostly recon/credential noise, with the occasional full APT campaign.
+const LIVE_FIRE_DECK = [
+    'brute_force', 'brute_force', 'brute_force',
+    'port_scan', 'port_scan', 'port_scan',
+    'xss', 'xss', 'graphql', 'graphql',
+    'sqli', 'sqli', 'token_theft',
+    'ml_anomaly', 'threat_intel', 'priv_esc', 'admin_breach',
+    'apt_campaign',
+];
+
+export const randomAttackKey = () => pick(LIVE_FIRE_DECK);
+
 // Ambient benign traffic to keep the console + timeline alive.
 const BENIGN = [
     () => `sshd: Accepted password for admin from 10.0.0.${20 + rand(30)} port 22 ssh2`,
