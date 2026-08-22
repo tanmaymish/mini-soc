@@ -25,7 +25,26 @@ from app.models.alert import create_alert
 
 
 class TokenAnomalyRule(BaseRule):
-    def __init__(self):
+    def __init__(self, ip_threshold: int = 3):
+        """
+        Args:
+            ip_threshold: Distinct source IPs on one token before alerting.
+
+        This used to alert the moment a token appeared from a second address,
+        which is what a phone does every time it drops off wifi onto mobile
+        data - and what any NAT, VPN or carrier-grade proxy looks like from
+        the server side. The detection benchmark scored it at 50% precision.
+
+        Three is a threshold, not a fix. The real discriminator is impossible
+        travel: two addresses far enough apart that no one could have moved
+        between them in the elapsed time. That needs geo-IP or ASN data this
+        project does not have yet, so the count is the stand-in, and it trades
+        recall for precision - a stolen token used from exactly one extra
+        address is now missed. Multi-tenant access still fires on the first
+        occurrence, because one token reading two tenants' data has no
+        innocent explanation.
+        """
+        self._ip_threshold = ip_threshold
         self._token_ips = defaultdict(set)      # token -> {ip}
         self._token_tenants = defaultdict(set)  # token -> {tenant}
         self._alerted = set()                   # (token, kind) already fired
@@ -83,7 +102,7 @@ class TokenAnomalyRule(BaseRule):
                           "tenants": sorted(self._token_tenants[token])},
             )
 
-        if len(self._token_ips[token]) > 1 and (token, "ip") not in self._alerted:
+        if len(self._token_ips[token]) >= self._ip_threshold and (token, "ip") not in self._alerted:
             self._alerted.add((token, "ip"))
             return create_alert(
                 rule_name=self.name, severity="high", source_ip=ip,

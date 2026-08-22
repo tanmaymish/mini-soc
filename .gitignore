@@ -33,3 +33,4 @@ frontend/dist/
 
 # Node
 node_modules/
+.coverage

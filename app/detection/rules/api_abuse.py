@@ -92,7 +92,13 @@ class ApiAbuseRule(BaseRule):
                           "window_seconds": self._window},
             )
 
-        if distinct_paths >= self._enum or not_found >= self._enum:
+        # Enumeration is breadth *plus* failure. Breadth alone matched every
+        # single-page app on the internet - a dashboard hydrating eleven
+        # endpoints on load looked identical to endpoint guessing, and the
+        # detection benchmark scored this arm at 66% precision because of it.
+        # An attacker guessing at endpoints gets 404s and 401s; a SPA loading
+        # its own API does not.
+        if not_found >= self._enum:
             self._fired[ip] = now.timestamp()
             return create_alert(
                 rule_name=self.name, severity="medium", source_ip=ip,

@@ -43,7 +43,19 @@ class PrivilegeEscalationRule(BaseRule):
     This is a correlation rule — more sophisticated than single-event rules.
     """
 
-    def __init__(self, lookback_seconds: int = 300, min_failures: int = 1):
+    def __init__(self, lookback_seconds: int = 300, min_failures: int = 3):
+        """
+        Args:
+            lookback_seconds: How far back a failed auth still counts.
+            min_failures: Failed auths before sudo is treated as escalation.
+
+        min_failures used to default to 1, which made this rule fire on the
+        most common shape in any auth log: an administrator mistyping a
+        password once and then running sudo. The detection benchmark scored
+        that at 50% precision. Three failures still catches a credential
+        attack that succeeded - the benchmark's compromise scenario has five -
+        while leaving ordinary fat-fingering alone.
+        """
         self._lookback_seconds = lookback_seconds
         self._min_failures = min_failures
         # {username: deque([(timestamp, event), ...])}

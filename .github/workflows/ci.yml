@@ -43,6 +43,22 @@ jobs:
       - name: Run unit + integration tests
         run: pytest -q
 
+      - name: Score detection efficacy
+        # Fails the build when an attack in the labelled corpus goes undetected
+        # or benign traffic raises an alert. The unit tests prove each rule fires
+        # on its trigger; this proves the rules stay quiet on an ordinary day.
+        run: |
+          # GitHub's default shell is `bash -e` without pipefail, so without
+          # this the exit code would come from tee and a regression would pass.
+          set -o pipefail
+          python scripts/benchmark_detections.py --check | tee /tmp/efficacy.txt
+          {
+            echo "## Detection efficacy"
+            echo '```'
+            cat /tmp/efficacy.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Train baseline ML model (synthetic cold-start)
         run: python scripts/train_model.py
 

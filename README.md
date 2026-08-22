@@ -227,6 +227,67 @@ python scripts/simulate_attack.py --mode all
 
 ---
 
+## 📊 Detection Efficacy
+
+Unit tests answer "does this rule fire when handed exactly the thing it looks
+for". That is not the question a detection engineer is judged on. The questions
+that matter are how much of what a rule alerts on is real, how much of what it
+should catch it catches, and how much noise it makes on an ordinary Tuesday.
+
+```bash
+python scripts/benchmark_detections.py           # report
+python scripts/benchmark_detections.py --json    # machine-readable
+python scripts/benchmark_detections.py --check   # CI gate, non-zero on regression
+```
+
+It replays a labelled corpus — 13 benign scenarios, 18 attacks — through the
+real `DetectionEngine`, one fresh engine per scenario so no rule's sliding
+window leaks into the next, and scores per-rule precision and recall.
+
+```
+rule                        TP  FP  FN   precision   recall
+--------------------------------------------------------------------------
+admin_endpoint_abuse         2   0   0      100.0%   100.0%
+api_abuse                    2   0   0      100.0%   100.0%
+brute_force_ssh              3   0   0      100.0%   100.0%
+graphql_abuse                2   0   0      100.0%   100.0%
+port_scan                    1   0   0      100.0%   100.0%
+privilege_escalation         1   0   0      100.0%   100.0%
+threat_intel_match           1   0   0      100.0%   100.0%
+token_anomaly                2   0   0      100.0%   100.0%
+web_attack                   5   0   0      100.0%   100.0%
+--------------------------------------------------------------------------
+Benign scenarios that alerted: 0/13  (0.0%)
+```
+
+**It did not start out clean.** The first run scored three rules well under
+100% precision, and each was a real defect that unit tests could not see,
+because each only shows up on traffic nobody had thought to write a test for:
+
+| Rule | Was | Fired on | Now |
+| --- | --- | --- | --- |
+| `privilege_escalation` | 50% precision | An admin mistyping a password once, then running `sudo` — the most common shape in any auth log | `min_failures` 1 → 3 |
+| `api_abuse` | 67% precision | A single-page app hydrating a dashboard across 11 endpoints | Enumeration now requires 4xx responses, not just breadth |
+| `token_anomaly` | 50% precision | A phone dropping off wifi onto mobile data, so one token arrives from two addresses | Threshold of 3 distinct IPs; multi-tenant access still fires on the first occurrence |
+
+The benchmark also scored a miss on a GraphQL query at depth 8 against a
+`max_depth` of 8. That one was the corpus being wrong rather than the rule — a
+query *at* the threshold is not over it — so the scenario was fixed, not the
+rule. Bending the detection to match a test is how a benchmark starts lying.
+
+**What this number is and is not.** The corpus was written alongside the rules,
+so a clean sweep means "no regression against the traffic shapes we thought of",
+not "correct in production". Its value is as a ratchet: `--check` fails CI when
+an attack goes undetected or benign traffic alerts, so noise cannot creep back
+in unnoticed. Adding a scenario that fails is a contribution, not a bug report —
+the benign half is the half worth growing.
+
+`ml_behavioral_anomaly` is inert without a trained model and the report says so
+rather than quietly scoring it as perfect; run `scripts/train_model.py` first to
+include it.
+
+---
+
 ## 🚀 Deployment
 
 Mini SOC hosts entirely on free tiers, split into a static dashboard and a

@@ -74,31 +74,49 @@ class TestFullPipeline:
         port_scan_alerts = [a for a in all_alerts if a["rule_name"] == "port_scan"]
         assert len(port_scan_alerts) == 1
 
+    def _failed_login(self, when, user="deploy", ip="10.20.30.40"):
+        ts = when.strftime("%b %d %H:%M:%S")
+        return (
+            f"{ts} server01 sshd[12500]: "
+            f"Failed password for {user} from {ip} port 22 ssh2"
+        )
+
+    def _sudo(self, when, user="deploy"):
+        ts = when.strftime("%b %d %H:%M:%S")
+        return (
+            f"{ts} server01 sudo[12510]: "
+            f"{user} : TTY=pts/0 ; PWD=/home/{user} ; USER=root ; "
+            f"COMMAND=/bin/bash"
+        )
+
     def test_priv_escalation_pipeline(self):
-        """Full pipeline: failed login + sudo → priv esc alert."""
+        """Full pipeline: repeated failed auth then sudo → priv esc alert."""
         now = datetime.now(timezone.utc)
         all_alerts = []
 
-        # Failed login for 'deploy'
-        ts1 = now.strftime("%b %d %H:%M:%S")
-        line1 = (
-            f"{ts1} server01 sshd[12500]: "
-            f"Failed password for deploy from 10.20.30.40 port 22 ssh2"
-        )
-        all_alerts.extend(self._process_log(line1))
+        for offset in (0, 10, 20):
+            all_alerts.extend(
+                self._process_log(self._failed_login(now + timedelta(seconds=offset)))
+            )
+        all_alerts.extend(self._process_log(self._sudo(now + timedelta(seconds=30))))
 
-        # Sudo by 'deploy'
-        ts2 = (now + timedelta(seconds=30)).strftime("%b %d %H:%M:%S")
-        line2 = (
-            f"{ts2} server01 sudo[12510]: "
-            f"deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; "
-            f"COMMAND=/bin/bash"
-        )
-        all_alerts.extend(self._process_log(line2))
+        priv_esc = [a for a in all_alerts if a["rule_name"] == "privilege_escalation"]
+        assert len(priv_esc) == 1
+        assert priv_esc[0]["severity"] == "critical"
 
-        assert len(all_alerts) == 1
-        assert all_alerts[0]["rule_name"] == "privilege_escalation"
-        assert all_alerts[0]["severity"] == "critical"
+    def test_single_typo_then_sudo_is_silent(self):
+        """
+        One mistyped password followed by sudo is an administrator having a
+        normal morning, not an escalation. The rule used to page on it; the
+        detection benchmark caught that, and this pins the fix.
+        """
+        now = datetime.now(timezone.utc)
+        all_alerts = []
+
+        all_alerts.extend(self._process_log(self._failed_login(now)))
+        all_alerts.extend(self._process_log(self._sudo(now + timedelta(seconds=30))))
+
+        assert all_alerts == []
 
     def test_benign_traffic_no_alerts(self):
         """Normal activity should produce zero alerts."""

@@ -112,9 +112,25 @@ def test_api_enumeration():
 # --- Token anomaly -------------------------------------------------------
 
 def test_token_reuse_from_new_ip():
-    rule = TokenAnomalyRule()
+    rule = TokenAnomalyRule(ip_threshold=2)
     rule.evaluate(api_event("/api/user/data", token="tok_abc123", ip="1.1.1.1"))
     alert = rule.evaluate(api_event("/api/user/data", token="tok_abc123", ip="2.2.2.2"))
+    assert alert is not None
+    assert alert["metadata"]["kind"] == "token_reuse"
+
+
+def test_token_from_second_ip_is_tolerated_by_default():
+    """A phone leaving wifi for mobile data is not an incident."""
+    rule = TokenAnomalyRule()
+    rule.evaluate(api_event("/api/user/data", token="tok_phone", ip="1.1.1.1"))
+    assert rule.evaluate(api_event("/api/user/data", token="tok_phone", ip="2.2.2.2")) is None
+
+
+def test_token_from_third_ip_alerts_by_default():
+    rule = TokenAnomalyRule()
+    rule.evaluate(api_event("/api/user/data", token="tok_spread", ip="1.1.1.1"))
+    rule.evaluate(api_event("/api/user/data", token="tok_spread", ip="2.2.2.2"))
+    alert = rule.evaluate(api_event("/api/user/data", token="tok_spread", ip="3.3.3.3"))
     assert alert is not None
     assert alert["metadata"]["kind"] == "token_reuse"
 
